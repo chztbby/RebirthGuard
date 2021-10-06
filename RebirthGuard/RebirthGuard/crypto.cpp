@@ -1,17 +1,12 @@
 
-/********************************************
-*											*
-*	RebirthGuard/crpyto.cpp - chztbby		*
-*											*
-********************************************/
+/*
+	chztbby::RebirthGuard/crypto.cpp
+*/
 
 #include "RebirthGuard.h"
 
 
-//-------------------------------------------------------
-//	Encrypted string (API Name)
-//-------------------------------------------------------
-CONST BYTE EncryptedAPI[][50]
+CONST BYTE encrypted_api_name[][50]
 {
 	{ 0xE3, 0xD9, 0xEE, 0xDF, 0xC8, 0xCC, 0xD9, 0xC8, 0xFE, 0xC8, 0xCE, 0xD9, 0xC4, 0xC2, 0xC3, 0xAD }, // NtCreateSection
 	{ 0xE3, 0xD9, 0xE0, 0xCC, 0xDD, 0xFB, 0xC4, 0xC8, 0xDA, 0xE2, 0xCB, 0xFE, 0xC8, 0xCE, 0xD9, 0xC4, 0xC2, 0xC3, 0xAD }, // NtMapViewOfSection
@@ -48,11 +43,7 @@ CONST BYTE EncryptedAPI[][50]
 	{ 0xFA, 0xC4, 0xC3, 0xE8, 0xD5, 0xC8, 0xCE, 0xAD, }, // WinExec
 };
 
-
-//-------------------------------------------------------
-//	CRC64 Table
-//-------------------------------------------------------
-CONST DWORD64 CRC64_Table[256]
+CONST DWORD64 crc64_table[256]
 {
 	0x0000000000000000, 0x7ad870c830358979,
 	0xf5b0e190606b12f2, 0x8f689158505e9b8b,
@@ -184,42 +175,34 @@ CONST DWORD64 CRC64_Table[256]
 	0x536fa08fdfd90e51, 0x29b7d047efec8728
 };
 
-
-//-------------------------------------------------------
-//	Decrypt string by XOR key
-//-------------------------------------------------------
-VOID DecryptXOR(CHAR* Buffer, DWORD64 API)
+VOID DecryptXOR(CHAR* buffer, DWORD api_index)
 {
-	if (API >= sizeof(EncryptedAPI) / sizeof(DWORD64))
-		Report(CURRENT_PROCESS, ENABLE | _LOG | _POPUP | _KILL, APICALL_Invalid_API, (PVOID)API, (PVOID)0);
+	if (api_index >= sizeof(encrypted_api_name) / sizeof(DWORD64))
+		Report(CURRENT_PROCESS, RG_ENABLE | RG_ENABLE_LOG | RG_ENABLE_POPUP | RG_ENABLE_KILL, REPORT_APICALL_INVALID_API, (PVOID)api_index, (PVOID)0);
 
 	for (DWORD i = 0; i < 50; i++)
-		Buffer[i] = EncryptedAPI[API][i] ^ XOR_KEY;
+		buffer[i] = encrypted_api_name[api_index][i] ^ XOR_KEY;
 }
 
-
-//-------------------------------------------------------
-//	CRC64
-//-------------------------------------------------------
-DWORD64 CRC64(PVOID ModuleBase)
+DWORD64 CRC64(PVOID module_base)
 {
-	DWORD64 CheckSize = 0;
-	PIMAGE_NT_HEADERS pNtHeader = GetNtHeader(ModuleBase);
-	PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
+	DWORD check_size = 0;
+	PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
+	PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
 
-	for (DWORD i = 0; i < pNtHeader->FileHeader.NumberOfSections; i++)
+	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
 	{
-		if (pSectionHeader[i].Characteristics & IMAGE_SCN_MEM_WRITE)
+		if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
-			CheckSize = pSectionHeader[i].VirtualAddress;
+			check_size = sec[i].VirtualAddress;
 			break;
 		}
 	}
 
 	DWORD64 result = 0;
 
-	for (DWORD64 j = 0; j < CheckSize; j++)
-		result = CRC64_Table[(BYTE)result ^ ((BYTE*)ModuleBase)[j]] ^ (result >> 8);
+	for (DWORD i = 0; i < check_size; i++)
+		result = crc64_table[(BYTE)result ^ ((BYTE*)module_base)[i]] ^ (result >> 8);
 
 	return result;
 }
