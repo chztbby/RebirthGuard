@@ -5,7 +5,9 @@ VisualStudioVersion = 16.0.30320.27
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RebirthGuard", "RebirthGuard\RebirthGuard.vcxproj", "{4D594C03-40A6-4F9E-86B3-8AAAC329F33A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SampleTest", "SampleTest\SampleTest.vcxproj", "{36574BD3-F3EB-4359-97FF-3C80F2106257}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SampleEXE", "SampleEXE\SampleEXE.vcxproj", "{36574BD3-F3EB-4359-97FF-3C80F2106257}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SampleDLL", "SampleDLL\SampleDLL.vcxproj", "{72588E16-75AB-485C-A5FF-A3162CECEF8C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{36574BD3-F3EB-4359-97FF-3C80F2106257}.Release|Win32.Build.0 = Release|Win32
 		{36574BD3-F3EB-4359-97FF-3C80F2106257}.Release|x64.ActiveCfg = Release|x64
 		{36574BD3-F3EB-4359-97FF-3C80F2106257}.Release|x64.Build.0 = Release|x64
+		{72588E16-75AB-485C-A5FF-A3162CECEF8C}.Release|Win32.ActiveCfg = Release|Win32
+		{72588E16-75AB-485C-A5FF-A3162CECEF8C}.Release|Win32.Build.0 = Release|Win32
+		{72588E16-75AB-485C-A5FF-A3162CECEF8C}.Release|x64.ActiveCfg = Release|x64
+		{72588E16-75AB-485C-A5FF-A3162CECEF8C}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

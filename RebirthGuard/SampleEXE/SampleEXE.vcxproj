@@ -17,8 +17,9 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{36574BD3-F3EB-4359-97FF-3C80F2106257}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>SampleTest</RootNamespace>
+    <RootNamespace>SampleEXE</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>SampleEXE</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -56,6 +57,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(SolutionDir)$(Platform)\$(Configuration)\;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)$(Platform)\$(Configuration)\;$(LibraryPath)</LibraryPath>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>

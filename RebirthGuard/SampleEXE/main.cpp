@@ -6,9 +6,11 @@
 
 int main(void)
 {
+	//CheckRebirthGuard();
+
 	printf("Hello RebirthGuard!\n");
 
-	getchar();
+	MessageBoxA(0, "Hello RebirthGuard!", 0, 0);
 
 	return 0;
 }
