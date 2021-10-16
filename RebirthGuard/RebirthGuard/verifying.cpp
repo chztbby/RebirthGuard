@@ -17,7 +17,7 @@ BOOL IsRebirthed(HANDLE process, PVOID module_base)
 		{
 			PSAPI_WORKING_SET_EX_INFORMATION wsi;
 			wsi.VirtualAddress = GetPtr(module_base, sec[i].VirtualAddress);
-			((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(process, module_base, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
+			APICALL(NtQueryVirtualMemory_T)(process, module_base, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
 
 			if (wsi.VirtualAttributes.Locked == 0)
 				return FALSE;
@@ -67,7 +67,7 @@ PVOID IsInModule(HANDLE process, PVOID ptr, DWORD type)
 			result = (PVOID)i;
 
 		if (process != CURRENT_PROCESS)
-			((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(CURRENT_PROCESS, &pe_header, &pe_header_size, MEM_RELEASE);
+			APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &pe_header, &pe_header_size, MEM_RELEASE);
 
 		if (result != (PVOID)-1)
 			return result;
@@ -94,11 +94,11 @@ BOOL IsSameFunction(PVOID f1, PVOID f2)
 VOID CheckThread(PVOID start_address, DWORD type)
 {
 #if RG_OPT_ANTI_DEBUGGING & RG_ENABLE
-	((NtSetInformationThread_T)ApiCall(API_NtSetInformationThread))(CURRENT_THREAD, ThreadHideFromDebugger, NULL, NULL);
+	APICALL(NtSetInformationThread_T)(CURRENT_THREAD, ThreadHideFromDebugger, NULL, NULL);
 #endif
 
 	MEMORY_BASIC_INFORMATION mbi;
-	((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(CURRENT_PROCESS, start_address, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+	APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, start_address, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
 
 	if (IsInModule(CURRENT_PROCESS, start_address, 0) == (PVOID)-1)
 		Report(CURRENT_PROCESS, RG_OPT_THREAD_CHECK, REPORT_THREAD_START_ADDRESS, start_address, (PVOID)type);
@@ -107,31 +107,31 @@ VOID CheckThread(PVOID start_address, DWORD type)
 		Report(CURRENT_PROCESS, RG_OPT_THREAD_CHECK, REPORT_THREAD_PROTECTION, start_address, (PVOID)type);
 
 #if RG_OPT_ANTI_DLL_INJECTION & RG_ENABLE
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryA), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryA_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryA, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryW), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryW_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryW, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExA), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExA_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExA, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExW), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExW_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExW, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryA), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryA_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryA, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryW), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryW_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryW, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExA), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExA_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExA, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExW), start_address))
+	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExW_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW, start_address, (PVOID)type);
 
-	if (IsSameFunction(ApiCall(MODULE_NTDLL, API_LdrLoadDll), start_address))
+	if (IsSameFunction(ApiCall(MODULE_NTDLL, API_LdrLoadDll_T), start_address))
 		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_NTDLL_LdrLoadDll, start_address, (PVOID)type);
 #endif
 }
@@ -146,7 +146,7 @@ VOID CheckFullMemory()
 #endif
 	{
 		MEMORY_BASIC_INFORMATION mbi;
-		((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
 
 		CheckMemory(ptr);
 
@@ -162,7 +162,7 @@ VOID CheckFullMemory()
 VOID CheckMemory(PVOID ptr)
 {
 	MEMORY_BASIC_INFORMATION mbi;
-	((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+	APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
 
 	if (mbi.Type == MEM_IMAGE && !(mbi.Protect & PAGE_WRITECOPY))
 		Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_IMAGE, ptr, (PVOID)0);
@@ -180,7 +180,7 @@ VOID CheckMemory(PVOID ptr)
 	{
 		PSAPI_WORKING_SET_EX_INFORMATION wsi;
 		wsi.VirtualAddress = ptr;
-		((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(CURRENT_PROCESS, ptr, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
+		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
 
 		if (wsi.VirtualAttributes.Locked == 0)
 			Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED, ptr, (PVOID)0);
@@ -202,7 +202,7 @@ VOID CheckCRC()
 		LPWSTR module_path = (LPWSTR)*(PVOID*)GetPtr(&list, 0x40);
 
 		MEMORY_BASIC_INFORMATION mbi;
-		((NtQueryVirtualMemory_T)ApiCall(API_NtQueryVirtualMemory))(CURRENT_PROCESS, module_base, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, module_base, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
 
 		if (!(mbi.Protect & PAGE_WRITECOPY))
 		{
@@ -251,7 +251,7 @@ VOID CheckCRC()
 #endif
 
 			SIZE_T image_size = NULL;
-			((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(CURRENT_PROCESS, &mapped_module, &image_size, MEM_RELEASE);
+			APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &mapped_module, &image_size, MEM_RELEASE);
 		}
 	}
 #endif

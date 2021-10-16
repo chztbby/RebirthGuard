@@ -8,21 +8,21 @@
 
 PVOID ManualMap(LPCWSTR module_path)
 {
-	HANDLE file = ((CreateFileW_T)ApiCall(API_CreateFileW))(module_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
+	HANDLE file = APICALL(CreateFileW_T)(module_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
 	DWORD file_size = GetFileSize(file, NULL);
 	PVOID image_base = NULL;
 	PVOID file_base = NULL;
 	SIZE_T alloc_size = file_size;
 
-	((NtAllocateVirtualMemory_T)ApiCall(API_NtAllocateVirtualMemory))(CURRENT_PROCESS, &file_base, NULL, &alloc_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-	((ReadFile_T)ApiCall(API_ReadFile))(file, file_base, file_size, 0, 0);
+	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &file_base, NULL, &alloc_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	APICALL(ReadFile_T)(file, file_base, file_size, 0, 0);
 	CloseHandle(file);
 
 	PIMAGE_NT_HEADERS nt = GetNtHeader(file_base);
 	PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
 
 	SIZE_T image_size = nt->OptionalHeader.SizeOfImage;
-	((NtAllocateVirtualMemory_T)ApiCall(API_NtAllocateVirtualMemory))(CURRENT_PROCESS, &image_base, NULL, &image_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &image_base, NULL, &image_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 
 	for (DWORD i = 0; i < nt->OptionalHeader.SizeOfHeaders; i += sizeof(PVOID))
 		*(PVOID*)GetPtr(image_base, i) = *(PVOID*)GetPtr(file_base, i);
@@ -32,7 +32,7 @@ PVOID ManualMap(LPCWSTR module_path)
 			*(PVOID*)GetPtr(image_base, sec[i].VirtualAddress + j) = *(PVOID*)GetPtr(file_base, sec[i].PointerToRawData + j);
 
 	alloc_size = NULL;
-	((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(CURRENT_PROCESS, &file_base, &alloc_size, MEM_RELEASE);
+	APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &file_base, &alloc_size, MEM_RELEASE);
 
 	nt = GetNtHeader(image_base);
 
@@ -76,7 +76,7 @@ PVOID ManualMap(LPCWSTR module_path)
 			import_module_path[i + 1] = 0;
 		}
 
-		HMODULE hmodule = ((LoadLibraryW_T)ApiCall(API_LoadLibraryW))(import_module_path);
+		HMODULE hmodule = APICALL(LoadLibraryW_T)(import_module_path);
 		if (!hmodule)
 			break;
 
@@ -113,7 +113,7 @@ PVOID ManualMap(LPCWSTR module_path)
 VOID ExtendWorkingSet(HANDLE process)
 {
 	QUOTA_LIMITS ql;
-	((NtQueryInformationProcess_T)ApiCall(API_NtQueryInformationProcess))(process, ProcessQuotaLimits, &ql, sizeof(ql), NULL);
+	APICALL(NtQueryInformationProcess_T)(process, ProcessQuotaLimits, &ql, sizeof(ql), NULL);
 
 	ql.MinimumWorkingSetSize += PAGE_SIZE;
 	if (ql.MaximumWorkingSetSize < ql.MinimumWorkingSetSize)
@@ -121,10 +121,10 @@ VOID ExtendWorkingSet(HANDLE process)
 
 	PVOID privilege_state = NULL;
 	DWORD privilege_value = SE_AUDIT_PRIVILEGE;
-	((RtlAcquirePrivilege_T)ApiCall(API_RtlAcquirePrivilege))(&privilege_value, 1, 0, &privilege_state);
+	APICALL(RtlAcquirePrivilege_T)(&privilege_value, 1, 0, &privilege_state);
 
-	((NtSetInformationProcess_T)ApiCall(API_NtSetInformationProcess))(process, ProcessQuotaLimits, &ql, sizeof(ql));
-	((RtlReleasePrivilege_T)ApiCall(API_RtlReleasePrivilege))(privilege_state);
+	APICALL(NtSetInformationProcess_T)(process, ProcessQuotaLimits, &ql, sizeof(ql));
+	APICALL(RtlReleasePrivilege_T)(privilege_state);
 }
 
 VOID AddRebirthedModule(HANDLE process, REBIRTHED_MODULE_INFO& rmi)
@@ -139,7 +139,7 @@ VOID AddRebirthedModule(HANDLE process, REBIRTHED_MODULE_INFO& rmi)
 	else
 	{
 		if (process != CURRENT_PROCESS)
-			((NtDuplicateObject_T)ApiCall(API_NtDuplicateObject))(CURRENT_PROCESS, rmi.section, process, &rmi.section, PROCESS_DUP_HANDLE, NULL, DUPLICATE_SAME_ACCESS);
+			APICALL(NtDuplicateObject_T)(CURRENT_PROCESS, rmi.section, process, &rmi.section, PROCESS_DUP_HANDLE, NULL, DUPLICATE_SAME_ACCESS);
 
 		for (int i = 0;; i++)
 		{
@@ -161,10 +161,10 @@ VOID AddRebirthedModule(HANDLE process, REBIRTHED_MODULE_INFO& rmi)
 				first2 = FALSE;
 
 				SIZE_T size = REBIRTHED_MODULE_LIST_SIZE;
-				((NtAllocateVirtualMemory_T)ApiCall(API_NtAllocateVirtualMemory))(process, (PVOID*)&rebirthed_module_list, NULL, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+				APICALL(NtAllocateVirtualMemory_T)(process, (PVOID*)&rebirthed_module_list, NULL, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 			}
 
-			((NtWriteVirtualMemory_T)ApiCall(API_NtWriteVirtualMemory))(process, rebirthed_module_list, rebirthed_module_list, REBIRTHED_MODULE_LIST_SIZE, NULL);
+			APICALL(NtWriteVirtualMemory_T)(process, rebirthed_module_list, rebirthed_module_list, REBIRTHED_MODULE_LIST_SIZE, NULL);
 		}
 	}
 }
@@ -180,10 +180,10 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 	PVOID origin_ntdll = RG_GetModuleHandleEx(CURRENT_PROCESS, ntdll_path);
 	PVOID proxy_ntdll = NULL;
 
-	NtCreateSection_T pNtCreateSection = (NtCreateSection_T)ApiCall(API_NtCreateSection);
-	NtMapViewOfSection_T pNtMapViewOfSection = (NtMapViewOfSection_T)ApiCall(API_NtMapViewOfSection);
-	NtUnmapViewOfSection_T pNtUnmapViewOfSection = (NtUnmapViewOfSection_T)ApiCall(API_NtUnmapViewOfSection);
-	NtLockVirtualMemory_T pNtLockVirtualMemory = (NtLockVirtualMemory_T)ApiCall(API_NtLockVirtualMemory);
+	NtCreateSection_T pNtCreateSection = APICALL(NtCreateSection_T);
+	NtMapViewOfSection_T pNtMapViewOfSection = APICALL(NtMapViewOfSection_T);
+	NtUnmapViewOfSection_T pNtUnmapViewOfSection = APICALL(NtUnmapViewOfSection_T);
+	NtLockVirtualMemory_T pNtLockVirtualMemory = APICALL(NtLockVirtualMemory_T);
 
 	if (!IsRebirthed(CURRENT_PROCESS, origin_ntdll))
 	{
@@ -267,7 +267,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 		{
 			if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
 			{
-				((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, GetPtr(module_base, sec[i].VirtualAddress), GetPtr(view_base, sec[i].VirtualAddress), image_size - sec[i].VirtualAddress, 0);
+				APICALL(NtReadVirtualMemory_T)(process, GetPtr(module_base, sec[i].VirtualAddress), GetPtr(view_base, sec[i].VirtualAddress), image_size - sec[i].VirtualAddress, 0);
 				break;
 			}
 		}
@@ -275,7 +275,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 #if RG_OPT_THREAD_CHECK & RG_ENABLE
 		if (module_base == origin_ntdll)
 		{
-			SIZE_T offset = (SIZE_T)ApiCall(API_RtlUserThreadStart) - (SIZE_T)origin_ntdll;
+			SIZE_T offset = (SIZE_T)APICALL(RtlUserThreadStart_T) - (SIZE_T)origin_ntdll;
 			BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
 			*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
 			for (DWORD i = 0; i < 14; i++)
@@ -326,7 +326,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 		DWORD protect = 0;
 		SIZE_T size = PAGE_SIZE;
 		PVOID ptr = module_base;
-		((NtProtectVirtualMemory_T)ApiCall(API_NtProtectVirtualMemory))(process, &ptr, &size, PAGE_READONLY, &protect);
+		APICALL(NtProtectVirtualMemory_T)(process, &ptr, &size, PAGE_READONLY, &protect);
 		for (DWORD i = 0, new_protect; i < nt->FileHeader.NumberOfSections; i++)
 		{
 			if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
@@ -339,7 +339,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 			protect = 0;
 			size = sec[i].Misc.VirtualSize;
 			ptr = GetPtr(module_base, sec[i].VirtualAddress);
-			((NtProtectVirtualMemory_T)ApiCall(API_NtProtectVirtualMemory))(process, &ptr, &size, new_protect, &protect);
+			APICALL(NtProtectVirtualMemory_T)(process, &ptr, &size, new_protect, &protect);
 		}
 
 		view_base = GetPtr(view_base, PAGE_SIZE);
@@ -357,11 +357,11 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 	CloseHandle(section);
 #endif
 	SIZE_T size = NULL;
-	((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(CURRENT_PROCESS, &mapped_module, &size, MEM_RELEASE);
+	APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &mapped_module, &size, MEM_RELEASE);
 
 	if (proxy_ntdll)
 	{
 		SIZE_T size = NULL;
-		((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(CURRENT_PROCESS, &proxy_ntdll, &size, MEM_RELEASE);
+		APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &proxy_ntdll, &size, MEM_RELEASE);
 	}
 }

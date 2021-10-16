@@ -26,7 +26,7 @@ VOID WINAPI ThreadCallback(PTHREAD_START_ROUTINE proc, PVOID param)
 {
 	CheckThread(proc, 0x10);
 
-	((NtTerminateThread_T)ApiCall(API_NtTerminateThread))(CURRENT_THREAD, proc(param));
+	APICALL(NtTerminateThread_T)(CURRENT_THREAD, proc(param));
 }
 
 LONG WINAPI DebugCallback(PEXCEPTION_POINTERS e)

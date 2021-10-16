@@ -18,15 +18,15 @@ PVOID GetPEHeader(HANDLE process, PVOID module_base)
 
 	PVOID pe_header = NULL;
 	SIZE_T pe_header_size = PAGE_SIZE;
-	((NtAllocateVirtualMemory_T)ApiCall(API_NtAllocateVirtualMemory))(CURRENT_PROCESS, &pe_header, NULL, &pe_header_size, MEM_COMMIT, PAGE_READWRITE);
-	((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, module_base, pe_header, pe_header_size, NULL);
+	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &pe_header, NULL, &pe_header_size, MEM_COMMIT, PAGE_READWRITE);
+	APICALL(NtReadVirtualMemory_T)(process, module_base, pe_header, pe_header_size, NULL);
 	return pe_header;
 }
 
 PVOID GetCurrentThreadStartAddress()
 {
 	PVOID start_address = NULL;
-	((NtQueryInformationThread_T)ApiCall(API_NtQueryInformationThread))(CURRENT_THREAD, ThreadQuerySetWin32StartAddress, &start_address, sizeof(start_address), 0);
+	APICALL(NtQueryInformationThread_T)(CURRENT_THREAD, ThreadQuerySetWin32StartAddress, &start_address, sizeof(start_address), 0);
 
 	return start_address;
 }
@@ -78,16 +78,16 @@ PVOID GetNextModule(HANDLE process, PLDR_DATA_TABLE_ENTRY plist)
 		if (!*(PVOID*)plist)
 		{
 			PROCESS_BASIC_INFORMATION pbi;
-			((NtQueryInformationProcess_T)ApiCall(API_NtQueryInformationProcess))(process, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), NULL);
+			APICALL(NtQueryInformationProcess_T)(process, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), NULL);
 
 			PEB peb;
 			PEB_LDR_DATA ldr;
-			((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, pbi.PebBaseAddress, &peb, sizeof(peb), NULL);
-			((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, peb.Ldr, &ldr, sizeof(ldr), NULL);
-			((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, ldr.InMemoryOrderModuleList.Flink, plist, sizeof(LDR_DATA_TABLE_ENTRY), NULL);
+			APICALL(NtReadVirtualMemory_T)(process, pbi.PebBaseAddress, &peb, sizeof(peb), NULL);
+			APICALL(NtReadVirtualMemory_T)(process, peb.Ldr, &ldr, sizeof(ldr), NULL);
+			APICALL(NtReadVirtualMemory_T)(process, ldr.InMemoryOrderModuleList.Flink, plist, sizeof(LDR_DATA_TABLE_ENTRY), NULL);
 		}
 		else
-			((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, *(PVOID*)plist, plist, sizeof(LDR_DATA_TABLE_ENTRY), NULL);
+			APICALL(NtReadVirtualMemory_T)(process, *(PVOID*)plist, plist, sizeof(LDR_DATA_TABLE_ENTRY), NULL);
 	}
 
 	return plist->DllBase;
@@ -135,7 +135,7 @@ HMODULE RG_GetModuleHandleEx(HANDLE process, LPCWSTR module_path)
 		if (process == CURRENT_PROCESS)
 			RG_wcscpy(module_name, list.FullDllName.Buffer);
 		else								
-			((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, list.FullDllName.Buffer, module_name, MAX_PATH, NULL);
+			APICALL(NtReadVirtualMemory_T)(process, list.FullDllName.Buffer, module_name, MAX_PATH, NULL);
 
 		if (RG_wcsistr(module_path, module_name))
 			return *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4));
@@ -200,8 +200,8 @@ VOID Report(HANDLE process, DWORD flag, REBIRTHGUARD_REPORT_CODE code, PVOID dat
 	*(PVOID*)&list = 0;
 	for (DWORD i = 0; GetNextModule(process, &list); ++i)
 	{
-		((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, list.FullDllName.Buffer, buffer1, MAX_PATH, NULL);
-		((NtReadVirtualMemory_T)ApiCall(API_NtReadVirtualMemory))(process, *(PVOID*)GetPtr(&list, 0x40), buffer2, MAX_PATH, NULL);
+		APICALL(NtReadVirtualMemory_T)(process, list.FullDllName.Buffer, buffer1, MAX_PATH, NULL);
+		APICALL(NtReadVirtualMemory_T)(process, *(PVOID*)GetPtr(&list, 0x40), buffer2, MAX_PATH, NULL);
 
 		if (order == (PVOID)i)
 		{
@@ -266,20 +266,20 @@ VOID Report(HANDLE process, DWORD flag, REBIRTHGUARD_REPORT_CODE code, PVOID dat
 		RG_strcat(path, scriptpath);
 		RG_strcat(path, "\"");
 
-		((WinExec_T)ApiCall(API_WinExec))(path, SW_SHOW);
+		APICALL(WinExec_T)(path, SW_SHOW);
 	}
 
 	if (flag & RG_ENABLE_MEM_FREE)
 	{
 		SIZE_T Size = NULL;
 		PVOID Address = data1;
-		((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(process, &Address, &Size, MEM_RELEASE);
-		((NtFreeVirtualMemory_T)ApiCall(API_NtFreeVirtualMemory))(process, &Address, &Size, MEM_RELEASE | MEM_DECOMMIT);
+		APICALL(NtFreeVirtualMemory_T)(process, &Address, &Size, MEM_RELEASE);
+		APICALL(NtFreeVirtualMemory_T)(process, &Address, &Size, MEM_RELEASE | MEM_DECOMMIT);
 	}
 
 	if (flag & RG_ENABLE_KILL)
 	{
-		((NtTerminateProcess_T)ApiCall(API_NtTerminateProcess))(process, 0);
-		((NtTerminateProcess_T)ApiCall(API_NtTerminateProcess))(CURRENT_PROCESS, 0);
+		APICALL(NtTerminateProcess_T)(process, 0);
+		APICALL(NtTerminateProcess_T)(CURRENT_PROCESS, 0);
 	}
 }

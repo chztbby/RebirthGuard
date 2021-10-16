@@ -26,6 +26,7 @@
 #define GetPtr(base, offset) ((PVOID)((SIZE_T)(base) + (SIZE_T)(offset)))
 #define GetOffset(src, dst) ((SIZE_T)((SIZE_T)(dst) - (SIZE_T)(src)))
 #define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)base + (SIZE_T)((PIMAGE_DOS_HEADER)base)->e_lfanew))
+#define APICALL(api) ((api)ApiCall(API_##api))
 
 #define SEC_NO_CHANGE 0x00400000
 #define STATUS_INVALID_PAGE_PROTECTION 0xC0000045
@@ -60,6 +61,7 @@ typedef NTSTATUS (NTAPI* NtSetInformationProcess_T) (HANDLE, DWORD, PVOID, ULONG
 typedef NTSTATUS (NTAPI* NtSetInformationThread_T) (HANDLE, DWORD, PVOID, ULONG);
 typedef NTSTATUS (NTAPI* RtlAcquirePrivilege_T) (PULONG, ULONG, ULONG, PVOID*);
 typedef NTSTATUS (NTAPI* RtlReleasePrivilege_T) (PVOID);
+typedef NTSTATUS (NTAPI* RtlUserThreadStart_T) (PTHREAD_START_ROUTINE, PVOID);
 typedef NTSTATUS (NTAPI* NtCreateThreadEx_T) (PHANDLE, ACCESS_MASK, PVOID, HANDLE, PVOID, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
 typedef NTSTATUS (NTAPI* NtTerminateProcess_T) (HANDLE, NTSTATUS);
 typedef NTSTATUS (NTAPI* NtTerminateThread_T) (HANDLE, NTSTATUS);
@@ -121,39 +123,39 @@ enum REBIRTHGUARD_REPORT_CODE
 
 enum API_INDEX
 {
-	API_NtCreateSection,
-	API_NtMapViewOfSection,
-	API_NtUnmapViewOfSection,
-	API_NtProtectVirtualMemory,
-	API_NtQueryVirtualMemory,
-	API_NtLockVirtualMemory,
-	API_NtReadVirtualMemory,
-	API_NtWriteVirtualMemory,
-	API_NtAllocateVirtualMemory,
-	API_NtFreeVirtualMemory,
-	API_NtTerminateProcess,
-	API_NtResumeProcess,
-	API_NtQueryInformationProcess,
-	API_NtSetInformationProcess,
-	API_RtlUserThreadStart,
-	API_NtCreateThreadEx,
-	API_NtTerminateThread,
-	API_NtQueryInformationThread,
-	API_NtSetInformationThread,
-	API_RtlAcquirePrivilege,
-	API_RtlReleasePrivilege,
-	API_RtlAddVectoredExceptionHandler,
-	API_LdrRegisterDllNotification,
-	API_NtDuplicateObject,
-	API_LoadLibraryA,
-	API_LoadLibraryW,
-	API_LoadLibraryExA,
-	API_LoadLibraryExW,
-	API_LdrLoadDll,
-	API_CreateProcessW,
-	API_CreateFileW,
-	API_ReadFile,
-	API_WinExec,
+	API_NtCreateSection_T,
+	API_NtMapViewOfSection_T,
+	API_NtUnmapViewOfSection_T,
+	API_NtProtectVirtualMemory_T,
+	API_NtQueryVirtualMemory_T,
+	API_NtLockVirtualMemory_T,
+	API_NtReadVirtualMemory_T,
+	API_NtWriteVirtualMemory_T,
+	API_NtAllocateVirtualMemory_T,
+	API_NtFreeVirtualMemory_T,
+	API_NtTerminateProcess_T,
+	API_NtResumeProcess_T,
+	API_NtQueryInformationProcess_T,
+	API_NtSetInformationProcess_T,
+	API_RtlUserThreadStart_T,
+	API_NtCreateThreadEx_T,
+	API_NtTerminateThread_T,
+	API_NtQueryInformationThread_T,
+	API_NtSetInformationThread_T,
+	API_RtlAcquirePrivilege_T,
+	API_RtlReleasePrivilege_T,
+	API_RtlAddVectoredExceptionHandler_T,
+	API_LdrRegisterDllNotification_T,
+	API_NtDuplicateObject_T,
+	API_LoadLibraryA_T,
+	API_LoadLibraryW_T,
+	API_LoadLibraryExA_T,
+	API_LoadLibraryExW_T,
+	API_LdrLoadDll_T,
+	API_CreateProcessW_T,
+	API_CreateFileW_T,
+	API_ReadFile_T,
+	API_WinExec_T,
 };
 
 // main.cpp
