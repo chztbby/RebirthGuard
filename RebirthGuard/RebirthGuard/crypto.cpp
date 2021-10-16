@@ -177,7 +177,7 @@ CONST DWORD64 crc64_table[256]
 
 VOID DecryptXOR(CHAR* buffer, DWORD api_index)
 {
-	if (api_index >= sizeof(encrypted_api_name) / sizeof(DWORD64))
+	if (api_index >= sizeof(encrypted_api_name) / sizeof(PVOID))
 		Report(CURRENT_PROCESS, RG_ENABLE | RG_ENABLE_LOG | RG_ENABLE_POPUP | RG_ENABLE_KILL, REPORT_APICALL_INVALID_API, (PVOID)api_index, (PVOID)0);
 
 	for (DWORD i = 0; i < 50; i++)
