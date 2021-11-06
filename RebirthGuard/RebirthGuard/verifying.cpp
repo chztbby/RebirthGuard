@@ -192,7 +192,6 @@ VOID CheckMemory(PVOID ptr)
 
 VOID CheckCRC()
 {
-#if RG_OPT_CRC_CHECK & RG_ENABLE
 	LDR_DATA_TABLE_ENTRY list;
 	*(PVOID*)&list = 0;
 
@@ -223,7 +222,7 @@ VOID CheckCRC()
 					while (!module_base)
 					{
 						module_base = NULL;
-						((NtMapViewOfSection_T)ApiCall(API_NtMapViewOfSection))(rebirthed_module_list[i].section, CURRENT_PROCESS, &module_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READONLY);
+						APICALL(NtMapViewOfSection_T)(rebirthed_module_list[i].section, CURRENT_PROCESS, &module_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READONLY);
 					}
 
 					break;
@@ -231,15 +230,17 @@ VOID CheckCRC()
 			}
 #endif
 			PVOID mapped_module = ManualMap(module_path);
+#ifdef _WIN64
 #if RG_OPT_THREAD_CHECK & RG_ENABLE
 			if (i == MODULE_NTDLL)
 			{
-				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_NTDLL)), ApiCall(API_RtlUserThreadStart));
+				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_NTDLL)), APICALL(RtlUserThreadStart_T));
 				BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
 				*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
 				for (DWORD i = 0; i < 14; i++)
 					*(BYTE*)GetPtr(mapped_module, RtlUserThreadStart_offset + i) = jmp_myRtlUserThreadStart[i];
 			}
+#endif
 #endif
 			(GetNtHeader(mapped_module))->OptionalHeader.ImageBase = (SIZE_T)RG_GetModuleHandleEx(CURRENT_PROCESS, module_path);
 
@@ -247,12 +248,11 @@ VOID CheckCRC()
 				Report(CURRENT_PROCESS, RG_OPT_CRC_CHECK, REPORT_CRC64_INTEGRITY, RG_GetModuleHandleEx(CURRENT_PROCESS, list.FullDllName.Buffer), 0);
 
 #if RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE
-			((NtUnmapViewOfSection_T)ApiCall(API_NtUnmapViewOfSection))(CURRENT_PROCESS, module_base);
+			APICALL(NtUnmapViewOfSection_T)(CURRENT_PROCESS, module_base);
 #endif
 
 			SIZE_T image_size = NULL;
 			APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &mapped_module, &image_size, MEM_RELEASE);
 		}
 	}
-#endif
 }

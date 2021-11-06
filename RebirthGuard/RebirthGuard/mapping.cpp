@@ -37,6 +37,8 @@ PVOID ManualMap(LPCWSTR module_path)
 	nt = GetNtHeader(image_base);
 
 	PVOID original_image_base = RG_GetModuleHandleEx(CURRENT_PROCESS, module_path);
+	HMODULE hkernel32 = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNEL32));
+	HMODULE hkernelbase = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNELBASE));
 
 	PIMAGE_BASE_RELOCATION base_reloc = (PIMAGE_BASE_RELOCATION)GetPtr(image_base, nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 	SIZE_T delta = GetOffset(nt->OptionalHeader.ImageBase, original_image_base);
@@ -84,21 +86,28 @@ PVOID ManualMap(LPCWSTR module_path)
 
 		while (oft->u1.AddressOfData)
 		{
+			PVOID func = NULL;
+
 			if (oft->u1.Ordinal & IMAGE_ORDINAL_FLAG)
 			{
-				*(PVOID*)ft = GetProcAddress(hmodule, (LPCSTR)(oft->u1.Ordinal & 0xFFFF));
+				func = GetProcAddress(hmodule, (LPCSTR)(oft->u1.Ordinal & 0xFFFF));
+				if (!func)
+					break;
 			}
 			else
 			{
-				PIMAGE_IMPORT_BY_NAME ibn = (PIMAGE_IMPORT_BY_NAME)((LPBYTE)image_base + oft->u1.AddressOfData);
-				HMODULE hkernel32 = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNEL32));
-				HMODULE hkernelbase = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNELBASE));
-
+				PIMAGE_IMPORT_BY_NAME ibn = (PIMAGE_IMPORT_BY_NAME)GetPtr(image_base, oft->u1.AddressOfData);
+				
 				if (original_image_base == hkernel32 && GetProcAddress(hkernelbase, (LPCSTR)ibn->Name))
-					hmodule = hkernelbase;
+					func = GetProcAddress(hkernelbase, (LPCSTR)ibn->Name);
+				else
+					func = GetProcAddress(hmodule, (LPCSTR)ibn->Name);
 
-				*(PVOID*)ft = GetProcAddress(hmodule, (LPCSTR)ibn->Name);
+				if (!func)
+					break;
 			}
+
+			*(PVOID*)ft = func;
 
 			oft++;
 			ft++;
@@ -271,7 +280,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 				break;
 			}
 		}
-
+#ifdef _WIN64
 #if RG_OPT_THREAD_CHECK & RG_ENABLE
 		if (module_base == origin_ntdll)
 		{
@@ -285,7 +294,7 @@ VOID RebirthModule(HANDLE process, LPCWSTR module_path)
 			}
 		}
 #endif
-
+#endif
 		SIZE_T execute_size = 0;
 		SIZE_T readonly_size = 0;
 		for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)

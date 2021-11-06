@@ -45,18 +45,16 @@ VOID RG_Initialze(PVOID hmodule)
 			CloseHandle(thread);
 
 			RebirthModule(pi.hProcess, exe_path);
-			//RebirthModule(pi.hProcess, GetModulePath(ntdll));
 
 #if RG_OPT_REBIRTH_SYSTEM_MODULES & RG_ENABLE
 			LDR_DATA_TABLE_ENTRY list;
 			*(PVOID*)&list = 0;
-			//while (GetNextModule(pi.hProcess, &list))
-			GetNextModule(pi.hProcess, &list);
+			for(DWORD i = MODULE_FIRST; i <= MODULE_LAST; ++i)
 			{
+				GetNextModule(pi.hProcess, &list);
 				WCHAR module_path[MAX_PATH];
 				APICALL(NtReadVirtualMemory_T)(pi.hProcess, *(PVOID*)GetPtr(&list, sizeof(PVOID) * 8), module_path, MAX_PATH, NULL);
 				RebirthModule(pi.hProcess, module_path);
-				MessageBoxW(0, module_path, 0, 0);
 			}
 #endif
 			APICALL(NtResumeProcess_T)(pi.hProcess);
