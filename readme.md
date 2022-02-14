@@ -11,10 +11,11 @@
 * __Anti-DLL Injection__
 * __Anti-Debugging__
 * __Process policy__
+* __Compatibility with Themida/VMProtect__
 
 ## :heavy_check_mark: Dependencies
 * Windows 7~11
-* Visual Studio 2019
+* Visual Studio C++
 
 ## :wrench: How to use
 1. Set options in `options.h` and build *RebirthGuard*.
