@@ -6,42 +6,37 @@
 #include "RebirthGuard.h"
 
 
-PVOID ManualMap(LPCWSTR module_path)
+PVOID LoadFile(PVOID module_base)
 {
+	WCHAR module_path[MAX_PATH];
+	GetModuleFileNameW((HMODULE)module_base, module_path, ARRAYSIZE(module_path));
+
 	HANDLE file = APICALL(CreateFileW_T)(module_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
 	DWORD file_size = GetFileSize(file, NULL);
-	PVOID image_base = NULL;
-	PVOID file_base = NULL;
-	SIZE_T alloc_size = file_size;
-
-	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &file_base, NULL, &alloc_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	
+	PVOID file_base = AllocMemory(NULL, file_size, PAGE_READWRITE);
 	APICALL(ReadFile_T)(file, file_base, file_size, 0, 0);
 	CloseHandle(file);
 
-	PIMAGE_NT_HEADERS nt = GetNtHeader(file_base);
-	PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
+	return file_base;
+}
 
-	SIZE_T image_size = nt->OptionalHeader.SizeOfImage;
-	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &image_base, NULL, &image_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+PVOID ManualMap(PVOID module_base)
+{
+	PVOID file_buffer = LoadFile(module_base);
+	PIMAGE_NT_HEADERS nt = GetNtHeader(file_buffer);
 
-	for (DWORD i = 0; i < nt->OptionalHeader.SizeOfHeaders; i += sizeof(PVOID))
-		*(PVOID*)GetPtr(image_base, i) = *(PVOID*)GetPtr(file_base, i);
-
-	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
-		for (DWORD j = 0; j < sec[i].SizeOfRawData; j += sizeof(PVOID))
-			*(PVOID*)GetPtr(image_base, sec[i].VirtualAddress + j) = *(PVOID*)GetPtr(file_base, sec[i].PointerToRawData + j);
-
-	alloc_size = NULL;
-	APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &file_base, &alloc_size, MEM_RELEASE);
+	PVOID image_base = AllocMemory(NULL, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE);
+	CopyPeData(image_base, file_buffer, PE_FILE);
+	FreeMemory(file_buffer);
 
 	nt = GetNtHeader(image_base);
 
-	PVOID original_image_base = RG_GetModuleHandleEx(CURRENT_PROCESS, module_path);
-	HMODULE hkernel32 = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNEL32));
-	HMODULE hkernelbase = RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_KERNELBASE));
+	HMODULE hkernel32 = RG_GetModuleHandleW(GetModulePath(MODULE_KERNEL32));
+	HMODULE hkernelbase = RG_GetModuleHandleW(GetModulePath(MODULE_KERNELBASE));
 
 	PIMAGE_BASE_RELOCATION base_reloc = (PIMAGE_BASE_RELOCATION)GetPtr(image_base, nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-	SIZE_T delta = GetOffset(nt->OptionalHeader.ImageBase, original_image_base);
+	SIZE_T delta = GetOffset(nt->OptionalHeader.ImageBase, module_base);
 
 	while (base_reloc->VirtualAddress)
 	{
@@ -98,7 +93,7 @@ PVOID ManualMap(LPCWSTR module_path)
 			{
 				PIMAGE_IMPORT_BY_NAME ibn = (PIMAGE_IMPORT_BY_NAME)GetPtr(image_base, oft->u1.AddressOfData);
 				
-				if (original_image_base == hkernel32 && GetProcAddress(hkernelbase, (LPCSTR)ibn->Name))
+				if (module_base == hkernel32 && GetProcAddress(hkernelbase, (LPCSTR)ibn->Name))
 					func = GetProcAddress(hkernelbase, (LPCSTR)ibn->Name);
 				else
 					func = GetProcAddress(hmodule, (LPCSTR)ibn->Name);
@@ -116,13 +111,15 @@ PVOID ManualMap(LPCWSTR module_path)
 		import++;
 	}
 
+	nt->OptionalHeader.ImageBase = (SIZE_T)module_base;
+
 	return image_base;
 }
 
-VOID ExtendWorkingSet(HANDLE process)
+VOID ExtendWorkingSet()
 {
 	QUOTA_LIMITS ql;
-	APICALL(NtQueryInformationProcess_T)(process, ProcessQuotaLimits, &ql, sizeof(ql), NULL);
+	APICALL(NtQueryInformationProcess_T)(CURRENT_PROCESS, ProcessQuotaLimits, &ql, sizeof(ql), NULL);
 
 	ql.MinimumWorkingSetSize += PAGE_SIZE;
 	if (ql.MaximumWorkingSetSize < ql.MinimumWorkingSetSize)
@@ -132,245 +129,261 @@ VOID ExtendWorkingSet(HANDLE process)
 	DWORD privilege_value = SE_AUDIT_PRIVILEGE;
 	APICALL(RtlAcquirePrivilege_T)(&privilege_value, 1, 0, &privilege_state);
 
-	APICALL(NtSetInformationProcess_T)(process, ProcessQuotaLimits, &ql, sizeof(ql));
+	APICALL(NtSetInformationProcess_T)(CURRENT_PROCESS, ProcessQuotaLimits, &ql, sizeof(ql));
 	APICALL(RtlReleasePrivilege_T)(privilege_state);
 }
 
-VOID AddRebirthedModule(HANDLE process, REBIRTHED_MODULE_INFO& rmi)
+VOID AddRebirthedModule(PVOID module_base, HANDLE section)
 {
 	static BOOL first = TRUE;
-	static BOOL first2 = TRUE;
 
-	if (first && IsRebirthed(CURRENT_PROCESS, RG_GetModuleHandleEx(CURRENT_PROCESS, NULL)) == NULL)
+	if (first && !IsRebirthed(RG_GetModuleHandleW(GetModulePath(MODULE_EXE))))
 	{
 		first = FALSE;
 	}
 	else
 	{
-		if (process != CURRENT_PROCESS)
-			APICALL(NtDuplicateObject_T)(CURRENT_PROCESS, rmi.section, process, &rmi.section, PROCESS_DUP_HANDLE, NULL, DUPLICATE_SAME_ACCESS);
-
 		for (int i = 0;; i++)
 		{
-			if (rebirthed_module_list[i].module_base == rmi.module_base)
+			if (rebirthed_module_list[i].module_base == module_base)
 				return;
 
-			if (rebirthed_module_list[i].section == NULL)
+			if (!rebirthed_module_list[i].section)
 			{
-				rebirthed_module_list[i].module_base = rmi.module_base;
-				rebirthed_module_list[i].section = rmi.section;
+				rebirthed_module_list[i].module_base = module_base;
+				rebirthed_module_list[i].section = section;
 				break;
 			}
-		}
-
-		if (process != CURRENT_PROCESS)
-		{
-			if (first2)
-			{
-				first2 = FALSE;
-
-				SIZE_T size = REBIRTHED_MODULE_LIST_SIZE;
-				APICALL(NtAllocateVirtualMemory_T)(process, (PVOID*)&rebirthed_module_list, NULL, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-			}
-
-			APICALL(NtWriteVirtualMemory_T)(process, rebirthed_module_list, rebirthed_module_list, REBIRTHED_MODULE_LIST_SIZE, NULL);
 		}
 	}
 }
 
-VOID RebirthModule(HANDLE process, LPCWSTR module_path)
+DWORD GetProtection(DWORD chr)
 {
-	PVOID module_base = RG_GetModuleHandleEx(process, module_path);
+	DWORD protect = NULL;
 
-	if (IsRebirthed(process, module_base))
+	if (chr & IMAGE_SCN_MEM_EXECUTE)
+	{
+		if (chr & IMAGE_SCN_MEM_WRITE)
+			protect = PAGE_EXECUTE_READWRITE;
+		else
+			protect = PAGE_EXECUTE_READ;
+	}
+	else
+	{
+		if (chr & IMAGE_SCN_MEM_WRITE)
+			protect = PAGE_READWRITE;
+		else
+			protect = PAGE_READONLY;
+	}
+
+	return protect;
+}
+
+DWORD GetNoChange(DWORD chr)
+{
+	if (GetProtection(chr) == PAGE_EXECUTE_READ)
+		return SEC_NO_CHANGE;
+	
+	return NULL;
+}
+
+VOID MapChunk(PMAP_INFO info, SIZE_T offset, SIZE_T size, DWORD chr)
+{
+	DWORD nochange = GetNoChange(chr);
+	DWORD protect = GetProtection(chr);
+
+	PVOID view_base = GetPtr(info->base, offset);
+	LARGE_INTEGER view_offset;
+	view_offset.QuadPart = offset;
+
+	info->pNtMapViewOfSection(info->hsection, CURRENT_PROCESS, &view_base, NULL, NULL, &view_offset, &size, ViewUnmap, nochange, protect);
+
+	SIZE_T lock_size = PAGE_SIZE;
+	while (info->pNtLockVirtualMemory(CURRENT_PROCESS, &view_base, &lock_size, VM_LOCK_1) == STATUS_WORKING_SET_QUOTA)
+		ExtendWorkingSet();
+}
+
+VOID MapAllSections(PMAP_INFO info)
+{
+	if (info->nt->OptionalHeader.SectionAlignment % ALLOCATION_GRANULARITY == 0)
+	{
+		PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(info->nt);
+
+		for (DWORD i = 0; i < info->nt->FileHeader.NumberOfSections; ++i)
+		{
+			DWORD chr = sec[i].Characteristics;
+
+#if IS_ENABLED(RG_OPT_COMPAT_THEMIDA)
+			if (sec[i].Name[1] == 't' && sec[i].Name[2] == 'h' && sec[i].Name[3] == 'e' && sec[i].Name[4] == 'm' && sec[i].Name[5] == 'i' && sec[i].Name[6] == 'd' && sec[i].Name[7] == 'a')
+				chr = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+#endif
+#if IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
+			if (sec[i].Name[1] == 'v' && sec[i].Name[2] == 'm' && sec[i].Name[3] == 'p')
+				if (sec[i].Name[4] == '1' || sec[i].Name[4] == '2')
+					chr = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+#endif
+
+			MapChunk(info, sec[i].VirtualAddress, (SIZE_T)PADDING(sec[i].Misc.VirtualSize, info->nt->OptionalHeader.SectionAlignment), chr);
+		}
+	}
+	else
+	{
+		PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(info->nt);
+
+		for (DWORD i = 0; i < info->nt->FileHeader.NumberOfSections; ++i)
+		{
+			SIZE_T sec_size = (SIZE_T)PADDING(sec[i].Misc.VirtualSize, info->nt->OptionalHeader.SectionAlignment);
+			SIZE_T full_chunk_size = info->chunk_size + sec_size;
+
+			if (full_chunk_size < ALLOCATION_GRANULARITY || (!(sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) && !(info->chunk_Characteristics & IMAGE_SCN_MEM_EXECUTE)))
+			{
+				if (info->chunk_size)
+				{
+					info->chunk_Characteristics |= sec[i].Characteristics;
+				}
+				else
+				{
+					info->chunk_offset = sec[i].VirtualAddress;
+					info->chunk_Characteristics = sec[i].Characteristics;
+				}
+
+				info->chunk_size = full_chunk_size;
+			}
+			else
+			{
+				if (info->chunk_size)
+				{
+					MapChunk(info, info->chunk_offset, ALLOCATION_GRANULARITY, (info->chunk_Characteristics | sec[i].Characteristics));
+					full_chunk_size -= ALLOCATION_GRANULARITY;
+					info->chunk_offset += ALLOCATION_GRANULARITY;
+					info->chunk_size = full_chunk_size;
+					info->chunk_Characteristics = sec[i].Characteristics;
+				}
+				else
+				{
+					info->chunk_offset = sec[i].VirtualAddress;
+				}
+
+				SIZE_T chunk_size = full_chunk_size / ALLOCATION_GRANULARITY * ALLOCATION_GRANULARITY;
+				if (chunk_size)
+					MapChunk(info, info->chunk_offset, chunk_size, sec[i].Characteristics);
+
+				if (full_chunk_size > chunk_size)
+				{
+					info->chunk_offset += chunk_size;
+					info->chunk_size = full_chunk_size - chunk_size;
+					info->chunk_Characteristics = sec[i].Characteristics;
+				}
+				else
+				{
+					info->chunk_offset = 0;
+					info->chunk_size = 0;
+					info->chunk_Characteristics = NULL;
+				}
+			}
+		}
+	}
+}
+
+VOID RebirthModule(PVOID hmodule, PVOID module_base)
+{
+	if (IsRebirthed(module_base))
 		return;
 
-	LPCWSTR ntdll_path = GetModulePath(MODULE_NTDLL);
-	PVOID origin_ntdll = RG_GetModuleHandleEx(CURRENT_PROCESS, ntdll_path);
-	PVOID proxy_ntdll = NULL;
+	PVOID original_ntdll = RG_GetModuleHandleW(GetModulePath(MODULE_NTDLL));
+	PVOID mapped_ntdll = NULL;
 
 	NtCreateSection_T pNtCreateSection = APICALL(NtCreateSection_T);
 	NtMapViewOfSection_T pNtMapViewOfSection = APICALL(NtMapViewOfSection_T);
 	NtUnmapViewOfSection_T pNtUnmapViewOfSection = APICALL(NtUnmapViewOfSection_T);
 	NtLockVirtualMemory_T pNtLockVirtualMemory = APICALL(NtLockVirtualMemory_T);
 
-	if (!IsRebirthed(CURRENT_PROCESS, origin_ntdll))
+	if (!IsRebirthed(original_ntdll))
 	{
-		proxy_ntdll = ManualMap(ntdll_path);
-		pNtCreateSection = (NtCreateSection_T)GetPtr(proxy_ntdll, GetOffset(origin_ntdll, pNtCreateSection));
-		pNtMapViewOfSection = (NtMapViewOfSection_T)GetPtr(proxy_ntdll, GetOffset(origin_ntdll, pNtMapViewOfSection));
-		pNtUnmapViewOfSection = (NtUnmapViewOfSection_T)GetPtr(proxy_ntdll, GetOffset(origin_ntdll, pNtUnmapViewOfSection));
+		mapped_ntdll = ManualMap(original_ntdll);
+		pNtCreateSection = (NtCreateSection_T)GetPtr(mapped_ntdll, GetOffset(original_ntdll, pNtCreateSection));
+		pNtMapViewOfSection = (NtMapViewOfSection_T)GetPtr(mapped_ntdll, GetOffset(original_ntdll, pNtMapViewOfSection));
+		pNtUnmapViewOfSection = (NtUnmapViewOfSection_T)GetPtr(mapped_ntdll, GetOffset(original_ntdll, pNtUnmapViewOfSection));
+		pNtLockVirtualMemory = (NtLockVirtualMemory_T)GetPtr(mapped_ntdll, GetOffset(original_ntdll, pNtLockVirtualMemory));
 	}
 
-	PVOID mapped_module = ManualMap(module_path);
-	PIMAGE_NT_HEADERS nt = GetNtHeader(mapped_module);
+	PVOID file_buffer = LoadFile(module_base);
+	PIMAGE_NT_HEADERS nt = GetNtHeader(file_buffer);
 	PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
 	HANDLE section = NULL;
+	LARGE_INTEGER section_size;
+	section_size.QuadPart = nt->OptionalHeader.SizeOfImage;
+	pNtCreateSection(&section, SECTION_ALL_ACCESS, NULL, &section_size, PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
+
 	PVOID view_base = NULL;
 	SIZE_T view_size = NULL;
-	SIZE_T lock_size = 1;
-	SIZE_T image_size = nt->OptionalHeader.SizeOfImage;
-	LARGE_INTEGER section_offset;
-	LARGE_INTEGER section_size;
+	pNtMapViewOfSection(section, CURRENT_PROCESS, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, NULL, PAGE_READWRITE);
 
-	for (DWORD i = 0; i < sizeof(LARGE_INTEGER); i += sizeof(PVOID))
-		*(PVOID*)GetPtr(&section_offset, i) = *(PVOID*)GetPtr(&section_size, i) = 0;
-
-	section_size.QuadPart = image_size;
-
-	nt->OptionalHeader.ImageBase = (SIZE_T)module_base;
-
-	if (nt->OptionalHeader.SectionAlignment == ALLOCATION_GRANULARITY)
-	{
-		pNtCreateSection(&section, SECTION_ALL_ACCESS, NULL, &section_size, PAGE_EXECUTE_READWRITE, SEC_COMMIT | SEC_NO_CHANGE, NULL);
-
-		pNtMapViewOfSection(section, CURRENT_PROCESS, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READWRITE);
-
-		for (DWORD i = 0; i < nt->OptionalHeader.SizeOfHeaders; i += sizeof(PVOID))
-			*(PVOID*)GetPtr(view_base, i) = *(PVOID*)GetPtr(mapped_module, i);
-
-		for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
-			for (DWORD j = 0; j < sec[i].Misc.VirtualSize; j += sizeof(PVOID))
-				*(PVOID*)GetPtr(view_base, sec[i].VirtualAddress + j) = *(PVOID*)GetPtr(mapped_module, sec[i].VirtualAddress + j);
-
-		pNtUnmapViewOfSection(CURRENT_PROCESS, view_base);
-
-		pNtUnmapViewOfSection(process, module_base);
-
-		view_base = module_base;
-		view_size = ALLOCATION_GRANULARITY;
-		pNtMapViewOfSection(section, process, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READONLY);
-
-		while (pNtLockVirtualMemory(process, &view_base, &lock_size, 1) == STATUS_WORKING_SET_QUOTA)
-			ExtendWorkingSet(process);
-
-		for (DWORD i = 0, Protect; i < nt->FileHeader.NumberOfSections; i++)
-		{
-			view_base = GetPtr(module_base, sec[i].VirtualAddress);
-			view_size = PADDING(sec[i].Misc.VirtualSize, ALLOCATION_GRANULARITY);
-			section_offset.QuadPart = sec[i].VirtualAddress;
-
-			if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
-				Protect = PAGE_EXECUTE_READ;
-			else if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
-				Protect = PAGE_READWRITE;
-			else
-				Protect = PAGE_READONLY;
-
-			pNtMapViewOfSection(section, process, &view_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, SEC_NO_CHANGE, Protect);
-
-			while (pNtLockVirtualMemory(process, &view_base, &lock_size, 1) == STATUS_WORKING_SET_QUOTA)
-				ExtendWorkingSet(process);
-		}
-	}
+	PVOID src_module;
+#if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
+	if (hmodule == module_base)
+		src_module = module_base;
 	else
-	{
-		pNtCreateSection(&section, SECTION_ALL_ACCESS, NULL, &section_size, PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
+#endif
+		src_module = ManualMap(module_base);
 
-		pNtMapViewOfSection(section, CURRENT_PROCESS, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, NULL, PAGE_READWRITE);
+	CopyPeData(view_base, src_module, PE_MEMORY);
 
-		for (DWORD i = 0; i < image_size; i += sizeof(PVOID))
-			*(PVOID*)GetPtr(view_base, i) = *(PVOID*)GetPtr(mapped_module, i);
+	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
+		for (DWORD j = 0; j < sec[i].Misc.VirtualSize; j += sizeof(PVOID))
+			if ((sec[i].Characteristics & IMAGE_SCN_MEM_WRITE))
+				*(PVOID*)GetPtr(view_base, (SIZE_T)sec[i].VirtualAddress + j) = *(PVOID*)GetPtr(module_base, (SIZE_T)sec[i].VirtualAddress + j);
 
-		for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
-		{
-			if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
-			{
-				APICALL(NtReadVirtualMemory_T)(process, GetPtr(module_base, sec[i].VirtualAddress), GetPtr(view_base, sec[i].VirtualAddress), image_size - sec[i].VirtualAddress, 0);
-				break;
-			}
-		}
+#if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
+	if (hmodule != module_base)
+#endif
+		FreeMemory(src_module);
+
+#if IS_ENABLED(RG_OPT_THREAD_CHECK)
 #ifdef _WIN64
-#if RG_OPT_THREAD_CHECK & RG_ENABLE
-		if (module_base == origin_ntdll)
-		{
-			SIZE_T offset = (SIZE_T)APICALL(RtlUserThreadStart_T) - (SIZE_T)origin_ntdll;
-			BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
-			*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
-			for (DWORD i = 0; i < 14; i++)
-			{
-				*(BYTE*)GetPtr(view_base, offset + i) = jmp_myRtlUserThreadStart[i];
-				*(BYTE*)GetPtr(mapped_module, offset + i) = jmp_myRtlUserThreadStart[i];
-			}
-		}
-#endif
-#endif
-		SIZE_T execute_size = 0;
-		SIZE_T readonly_size = 0;
-		for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
-		{
-			if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
-				execute_size += PADDING(sec[i].Misc.VirtualSize, PAGE_SIZE);
-			else
-			{
-				readonly_size = PADDING(sec[i].Misc.VirtualSize, PAGE_SIZE);
-				execute_size += PAGE_SIZE;
-				break;
-			}
-		}
-
-		pNtUnmapViewOfSection(CURRENT_PROCESS, view_base);
-
-		pNtUnmapViewOfSection(process, module_base);
-
-		view_base = module_base;
-		view_size = section_size.QuadPart;
-
-		if (execute_size + readonly_size >= ALLOCATION_GRANULARITY && execute_size + readonly_size >= PADDING(execute_size, ALLOCATION_GRANULARITY))
-		{
-			view_size = PADDING(execute_size, ALLOCATION_GRANULARITY);
-			pNtMapViewOfSection(section, process, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_EXECUTE_READ);
-			while (pNtLockVirtualMemory(process, &view_base, &lock_size, 1) == STATUS_WORKING_SET_QUOTA)
-				ExtendWorkingSet(process);
-
-			section_offset.QuadPart = view_size;
-			view_base = GetPtr(module_base, view_size);
-			view_size = image_size - view_size;
-			pNtMapViewOfSection(section, process, &view_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, NULL, PAGE_READWRITE);
-		}
-
-		else
-			pNtMapViewOfSection(section, process, &view_base, NULL, NULL, NULL, &view_size, ViewUnmap, NULL, PAGE_EXECUTE_WRITECOPY);
-
-		DWORD protect = 0;
-		SIZE_T size = PAGE_SIZE;
-		PVOID ptr = module_base;
-		APICALL(NtProtectVirtualMemory_T)(process, &ptr, &size, PAGE_READONLY, &protect);
-		for (DWORD i = 0, new_protect; i < nt->FileHeader.NumberOfSections; i++)
-		{
-			if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
-				new_protect = PAGE_EXECUTE_READ;
-			else if (sec[i].Characteristics & IMAGE_SCN_MEM_WRITE)
-				new_protect = PAGE_WRITECOPY;
-			else
-				new_protect = PAGE_READONLY;
-
-			protect = 0;
-			size = sec[i].Misc.VirtualSize;
-			ptr = GetPtr(module_base, sec[i].VirtualAddress);
-			APICALL(NtProtectVirtualMemory_T)(process, &ptr, &size, new_protect, &protect);
-		}
-
-		view_base = GetPtr(view_base, PAGE_SIZE);
-		while (pNtLockVirtualMemory(process, &view_base, &lock_size, 1) == STATUS_WORKING_SET_QUOTA)
-			ExtendWorkingSet(process);
+	if (module_base == original_ntdll)
+	{
+		SIZE_T offset = GetOffset(original_ntdll, APICALL(RtlUserThreadStart_T));
+		BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
+		*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
+		memcpy(GetPtr(view_base, offset), jmp_myRtlUserThreadStart, sizeof(jmp_myRtlUserThreadStart));
 	}
-
-#if RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE
-	REBIRTHED_MODULE_INFO rmi;
-	rmi.module_base = module_base;
-	rmi.section = section;
-	AddRebirthedModule(process, rmi);
+#else
+	// x86
 #endif
-#if !(RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE)
+#endif
+	pNtUnmapViewOfSection(CURRENT_PROCESS, view_base);
+
+	pNtUnmapViewOfSection(CURRENT_PROCESS, module_base);
+
+	MAP_INFO mapinfo;
+	mapinfo.pNtMapViewOfSection = pNtMapViewOfSection;
+	mapinfo.pNtLockVirtualMemory = pNtLockVirtualMemory;
+	mapinfo.base = module_base;
+	mapinfo.hsection = section;
+	mapinfo.nt = nt;
+	mapinfo.chunk_offset = 0;
+	mapinfo.chunk_size = PADDING(nt->OptionalHeader.SizeOfHeaders, nt->OptionalHeader.SectionAlignment);
+	mapinfo.chunk_Characteristics = IMAGE_SCN_MEM_READ;
+	MapAllSections(&mapinfo);
+
+	if (mapinfo.chunk_size)
+		MapChunk(&mapinfo, mapinfo.chunk_offset, mapinfo.chunk_size, mapinfo.chunk_Characteristics);
+
+	ProtectMemory(module_base, PADDING(nt->OptionalHeader.SizeOfHeaders, nt->OptionalHeader.SectionAlignment), PAGE_READONLY);
+	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; ++i)
+		ProtectMemory(GetPtr(module_base, sec[i].VirtualAddress), PADDING(sec[i].Misc.VirtualSize, nt->OptionalHeader.SectionAlignment), GetProtection(sec[i].Characteristics));
+
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
+	AddRebirthedModule(module_base, section);
+#else
 	CloseHandle(section);
 #endif
-	SIZE_T size = NULL;
-	APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &mapped_module, &size, MEM_RELEASE);
+	FreeMemory(file_buffer);
 
-	if (proxy_ntdll)
-	{
-		SIZE_T size = NULL;
-		APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &proxy_ntdll, &size, MEM_RELEASE);
-	}
+	if (mapped_ntdll)
+		FreeMemory(mapped_ntdll);
+
+	HideModule(module_base);
 }

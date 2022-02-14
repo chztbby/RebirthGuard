@@ -22,11 +22,12 @@
 #define MODULE_KERNEL32 2
 #define MODULE_KERNELBASE 3
 #define MODULE_LAST 3
-#define PADDING(p, size) (p / size * size + (p % size ? size : 0))
+#define PADDING(p, size) ((SIZE_T)((SIZE_T)(p) / (SIZE_T)(size) * (SIZE_T)(size) + ((SIZE_T)(p) % (SIZE_T)(size) ? (SIZE_T)(size) : 0)))
 #define GetPtr(base, offset) ((PVOID)((SIZE_T)(base) + (SIZE_T)(offset)))
 #define GetOffset(src, dst) ((SIZE_T)((SIZE_T)(dst) - (SIZE_T)(src)))
-#define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)base + (SIZE_T)((PIMAGE_DOS_HEADER)base)->e_lfanew))
-#define APICALL(api) ((api)ApiCall(API_##api))
+#define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)(base) + (SIZE_T)((PIMAGE_DOS_HEADER)(base))->e_lfanew))
+#define APICALL(api) ((api)GetApi(API_##api))
+#define IS_ENABLED(OPTION) (OPTION & RG_ENABLE)
 
 #define SEC_NO_CHANGE 0x00400000
 #define STATUS_INVALID_PAGE_PROTECTION 0xC0000045
@@ -43,6 +44,7 @@
 #define ThreadQuerySetWin32StartAddress 9
 #define	ThreadHideFromDebugger 0x11
 #define SE_AUDIT_PRIVILEGE 0x21
+#define VM_LOCK_1 0x0001
 
 typedef NTSTATUS (NTAPI* NtCreateSection_T) (PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PLARGE_INTEGER, ULONG, ULONG, HANDLE);
 typedef NTSTATUS (NTAPI* NtMapViewOfSection_T) (HANDLE, HANDLE, PVOID*, ULONG_PTR, SIZE_T, PLARGE_INTEGER, PSIZE_T, DWORD, ULONG, ULONG);
@@ -67,7 +69,6 @@ typedef NTSTATUS (NTAPI* NtTerminateProcess_T) (HANDLE, NTSTATUS);
 typedef NTSTATUS (NTAPI* NtTerminateThread_T) (HANDLE, NTSTATUS);
 typedef NTSTATUS (NTAPI* RtlAddVectoredExceptionHandler_T) (ULONG, PVECTORED_EXCEPTION_HANDLER);
 typedef NTSTATUS (NTAPI* LdrRegisterDllNotification_T) (ULONG, PVOID, PVOID, PVOID);
-typedef NTSTATUS (NTAPI* NtDuplicateObject_T) (HANDLE, HANDLE, HANDLE, PHANDLE, DWORD, ULONG, ULONG);
 typedef HMODULE	 (WINAPI* LoadLibraryW_T) (LPCWSTR);
 typedef BOOL (WINAPI* CreateProcessW_T) (LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
 typedef HANDLE (WINAPI* CreateFileW_T) (LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
@@ -82,6 +83,44 @@ typedef struct _REBIRTHED_MODULE_INFO
 
 static REBIRTHED_MODULE_INFO* rebirthed_module_list = (REBIRTHED_MODULE_INFO*)REBIRTHED_MODULE_LIST_PTR;
 
+typedef struct _MAP_INFO
+{
+	NtMapViewOfSection_T pNtMapViewOfSection;
+	NtLockVirtualMemory_T pNtLockVirtualMemory;
+
+	PVOID base;
+	HANDLE hsection;
+	PIMAGE_NT_HEADERS nt;
+
+	SIZE_T chunk_offset;
+	SIZE_T chunk_size;
+	DWORD chunk_Characteristics;
+} MAP_INFO, * PMAP_INFO;
+
+typedef struct _LDR_DLL_LOADED_NOTIFICATION_DATA 
+{
+	ULONG Flags;
+	PCUNICODE_STRING FullDllName;
+	PCUNICODE_STRING BaseDllName;
+	PVOID DllBase;
+	ULONG SizeOfImage;
+} LDR_DLL_LOADED_NOTIFICATION_DATA, * PLDR_DLL_LOADED_NOTIFICATION_DATA;
+
+typedef struct _LDR_DLL_UNLOADED_NOTIFICATION_DATA
+{
+	ULONG Flags;
+	PCUNICODE_STRING FullDllName;
+	PCUNICODE_STRING BaseDllName;
+	PVOID DllBase;
+	ULONG SizeOfImage;
+} LDR_DLL_UNLOADED_NOTIFICATION_DATA, * PLDR_DLL_UNLOADED_NOTIFICATION_DATA;
+
+typedef union _LDR_DLL_NOTIFICATION_DATA
+{
+	LDR_DLL_LOADED_NOTIFICATION_DATA Loaded;
+	LDR_DLL_UNLOADED_NOTIFICATION_DATA Unloaded;
+} LDR_DLL_NOTIFICATION_DATA, * PLDR_DLL_NOTIFICATION_DATA;
+
 typedef struct _PEB_LDR_DATA_
 {
 	ULONG Length;
@@ -92,7 +131,7 @@ typedef struct _PEB_LDR_DATA_
 	LIST_ENTRY InInitializationOrderModuleList;
 } PEB_LDR_DATA_, *PPEB_LDR_DATA_;
 
-enum REBIRTHGUARD_REPORT_CODE
+enum RG_REPORT_CODE
 {
 	REPORT_UNKNOWN,
 	REPORT_THREAD_START_ADDRESS,
@@ -112,13 +151,16 @@ enum REBIRTHGUARD_REPORT_CODE
 	REPORT_MEMORY_EXECUTE_WRITE,
 	REPORT_MEMORY_UNLOCKED,
 	REPORT_MEMORY_UNLOCKED2,
-	REPORT_CRC64_SECTION,
-	REPORT_CRC64_INTEGRITY,
-	REPORT_APICALL_INVALID_API,
-	REPORT_EXCEPTION_HARDWARE_BREAKPOINT,
-	REPORT_EXCEPTION_DEBUG,
-	REPORT_EXCEPTION_SINGLE_STEP,
-	REPORT_EXCEPTION_GUARDED_PAGE,
+	REPORT_INTEGRITY_SECTION_CHECK,
+	REPORT_INTEGRITY_CRC64_CHECK,
+	REPORT_INVALID_APICALL,
+	REPORT_DEBUG_HW_BREAKPOINT_0,
+	REPORT_DEBUG_HW_BREAKPOINT_1,
+	REPORT_DEBUG_HW_BREAKPOINT_2,
+	REPORT_DEBUG_HW_BREAKPOINT_3,
+	REPORT_DEBUG_SW_BREAKPOINT,
+	REPORT_DEBUG_SINGLE_STEP,
+	REPORT_DEBUG_PAGE_GUARD,
 };
 
 enum API_INDEX
@@ -146,7 +188,6 @@ enum API_INDEX
 	API_RtlReleasePrivilege_T,
 	API_RtlAddVectoredExceptionHandler_T,
 	API_LdrRegisterDllNotification_T,
-	API_NtDuplicateObject_T,
 	API_LoadLibraryA_T,
 	API_LoadLibraryW_T,
 	API_LoadLibraryExA_T,
@@ -158,42 +199,60 @@ enum API_INDEX
 	API_WinExec_T,
 };
 
+enum PE_TYPE
+{
+	PE_FILE,
+	PE_MEMORY
+};
+
 // main.cpp
 VOID RG_Initialze(PVOID hmodule);
+DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule);
+VOID Rebirth(PVOID hmodule);
+VOID RebirthAll(PVOID hmodule);
+BOOL CheckProcessPolicy();
+VOID SetProcessPolicy();
 
 // function.cpp
 BOOL IsExe(PVOID hmodule);
-PVOID GetPEHeader(HANDLE process, PVOID module_base);
 PVOID GetCurrentThreadStartAddress();
 LPWSTR GetModulePath(DWORD module_index);
-PVOID GetNextModule(HANDLE process, PLDR_DATA_TABLE_ENTRY plist);
-VOID HideModules();
-HMODULE RG_GetModuleHandleEx(HANDLE process, LPCWSTR module_path);
-FARPROC ApiCall(API_INDEX api_index);
-FARPROC ApiCall(DWORD module_index, API_INDEX api_index);
+PVOID GetNextModule(PLDR_DATA_TABLE_ENTRY plist);
+VOID HideModule(PVOID hmodule);
+HMODULE RG_GetModuleHandleW(LPCWSTR module_path);
+FARPROC GetApi(API_INDEX api_index);
+FARPROC GetApi(DWORD module_index, API_INDEX api_index);
 VOID RG_DebugLog(LPCWSTR format, ...);
-VOID Report(HANDLE process, DWORD flag, REBIRTHGUARD_REPORT_CODE code, PVOID data1, PVOID data2);
+VOID Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2);
+VOID CopyPeData(PVOID dst, PVOID src, PE_TYPE src_type);
+PVOID AllocMemory(PVOID ptr, SIZE_T size, DWORD protect);
+VOID FreeMemory(PVOID ptr);
+DWORD ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect);
+VOID QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
+HANDLE RG_CreateThread(PVOID entry, PVOID param);
+VOID RG_SetCallbacks();
 
 // mapping.cpp
-PVOID ManualMap(LPCWSTR module_path);
-VOID ExtendWorkingSet(HANDLE process);
-VOID AddRebirthedModule(HANDLE process, REBIRTHED_MODULE_INFO& rmi);
-VOID RebirthModule(HANDLE process, LPCWSTR module_path);
+PVOID LoadFile(PVOID module_base);
+PVOID ManualMap(PVOID module_base);
+VOID ExtendWorkingSet();
+VOID AddRebirthedModule(PVOID module_base, HANDLE section);
+VOID RebirthModule(PVOID hmodule, PVOID module_base);
 
 // verifying.cpp
-BOOL IsRebirthed(HANDLE process, PVOID module_base);
-PVOID IsInModule(HANDLE process, PVOID ptr, DWORD type);
+BOOL IsRebirthed(PVOID module_base);
+PVOID IsInModule(PVOID ptr, DWORD type);
 BOOL IsSameFunction(PVOID f1, PVOID f2);
 VOID CheckThread(PVOID start_address, DWORD type);
 VOID CheckFullMemory();
 VOID CheckMemory(PVOID ptr);
 VOID CheckCRC();
 
-// callback.cpp */
+// callback.cpp
 VOID WINAPI RG_TlsCallback(PVOID dllhandle, DWORD reason, PVOID reserved);
 VOID WINAPI ThreadCallback(PTHREAD_START_ROUTINE proc, PVOID param);
-LONG WINAPI DebugCallback(PEXCEPTION_POINTERS e);
-VOID CALLBACK DllCallback(ULONG notification_reason, PVOID notification_data, PVOID context);
+VOID DebugCallback(PEXCEPTION_POINTERS e);
+VOID CALLBACK DllCallback(ULONG notification_reason, PLDR_DLL_NOTIFICATION_DATA notification_data, PVOID context);
 
 // crypto.cpp
 VOID DecryptXOR(CHAR* buffer, DWORD api_index);

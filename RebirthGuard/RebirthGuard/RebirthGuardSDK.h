@@ -9,6 +9,7 @@
 #include <Windows.h>
 
 #pragma comment(linker, "/ALIGN:0x10000")
+#pragma check_stack(off)
 
 VOID WINAPI RG_TlsCallback(PVOID, DWORD, PVOID);
 

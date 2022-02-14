@@ -5,76 +5,105 @@
 
 #include "RebirthGuard.h"
 
-VOID Dummy() {}
-
 VOID RG_Initialze(PVOID hmodule)
 {
+#if IS_ENABLED(RG_OPT_SET_PROCESS_POLICY)
 	if (IsExe(hmodule))
 	{
-		if (GetCurrentThreadStartAddress() != Dummy)
-		{
-#if RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE
-			SIZE_T list_size = REBIRTHED_MODULE_LIST_SIZE;
-			APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, (PVOID*)&rebirthed_module_list, NULL, &list_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-#endif
-			LPCWSTR exe_path = GetModulePath(MODULE_EXE);
-
-			STARTUPINFOEX si = { sizeof(si) };
-			PROCESS_INFORMATION pi;
-#if RG_OPT_PROCESS_POLICY & RG_ENABLE
-			SIZE_T size = 0;
-			InitializeProcThreadAttributeList(NULL, 1, 0, &size);
-
-			LPPROC_THREAD_ATTRIBUTE_LIST attr = (LPPROC_THREAD_ATTRIBUTE_LIST)new BYTE[size];
-			InitializeProcThreadAttributeList(attr, 1, 0, &size);
-
-			DWORD64 policy = RG_PROCESS_POLICY;
-			UpdateProcThreadAttribute(attr, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &policy, sizeof(policy), NULL, NULL);
-
-			si.StartupInfo.cb = sizeof(si);
-			si.lpAttributeList = attr;
-			APICALL(CreateProcessW_T)(exe_path, GetCommandLineW(), NULL, NULL, NULL, CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi);
-			delete[] attr;
-#endif
-#if !(RG_OPT_PROCESS_POLICY & RG_ENABLE)
-			((CreateProcessW_T)ApiCall(API_CreateProcessW))(exe_path, GetCommandLineW(), NULL, NULL, NULL, CREATE_SUSPENDED, NULL, NULL, (STARTUPINFO*)&si, &pi);
-#endif
-			HANDLE thread = NULL;
-			APICALL(NtCreateThreadEx_T)(&thread, MAXIMUM_ALLOWED, NULL, pi.hProcess, Dummy, NULL, NULL, NULL, NULL, NULL, NULL);
-			WaitForSingleObject(thread, INFINITE);
-			CloseHandle(thread);
-
-			RebirthModule(pi.hProcess, exe_path);
-
-#if RG_OPT_REBIRTH_SYSTEM_MODULES & RG_ENABLE
-			LDR_DATA_TABLE_ENTRY list;
-			*(PVOID*)&list = 0;
-			for(DWORD i = MODULE_FIRST; i <= MODULE_LAST; ++i)
-			{
-				GetNextModule(pi.hProcess, &list);
-				WCHAR module_path[MAX_PATH];
-				APICALL(NtReadVirtualMemory_T)(pi.hProcess, *(PVOID*)GetPtr(&list, sizeof(PVOID) * 8), module_path, MAX_PATH, NULL);
-				RebirthModule(pi.hProcess, module_path);
-			}
-#endif
-			APICALL(NtResumeProcess_T)(pi.hProcess);
-
-			APICALL(NtTerminateProcess_T)(CURRENT_PROCESS, 0);
-		}
+		if (!CheckProcessPolicy())
+			SetProcessPolicy();
 		else
-		{
-#if RG_OPT_ANTI_DEBUGGING & RG_ENABLE
-			APICALL(RtlAddVectoredExceptionHandler_T)(1, DebugCallback);
-#endif
-			PVOID cookie = NULL;
-			APICALL(LdrRegisterDllNotification_T)(0, DllCallback, NULL, &cookie);
-			cookie = NULL;
-
-			// load system dll
-		}
+			RG_CreateThread(RG_InitialzeWorker, hmodule);
 	}
 	else
+#endif
 	{
-
+		RG_InitialzeWorker(hmodule);
 	}
+}
+
+DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule)
+{
+	if (IsRebirthed(hmodule))
+		return 0;
+
+	Rebirth(hmodule);
+
+	RG_SetCallbacks();
+
+	return 0;
+}
+
+VOID Rebirth(PVOID hmodule)
+{
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
+	AllocMemory((PVOID)REBIRTHED_MODULE_LIST_PTR, REBIRTHED_MODULE_LIST_SIZE, PAGE_READWRITE);
+#endif
+#if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
+	PIMAGE_NT_HEADERS nt = GetNtHeader(hmodule);
+	PVOID mapped_module = AllocMemory(NULL, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE);
+	CopyPeData(mapped_module, hmodule, PE_MEMORY);
+#else
+	PVOID mapped_module = ManualMap(hmodule);
+#endif
+	auto pRebirthModule = decltype (&RebirthModule)GetPtr(mapped_module, GetOffset(hmodule, RebirthModule));
+	pRebirthModule(hmodule, hmodule);
+
+	FreeMemory(mapped_module);
+
+#if IS_ENABLED(RG_OPT_REBIRTH_ALL_MODULES)
+	RebirthAll(hmodule);
+#endif
+}
+
+VOID RebirthAll(PVOID hmodule)
+{
+#ifdef _WIN64 // unstable in x86 yet.
+	for (LPCWSTR mod : system_modules)
+		if (!RG_GetModuleHandleW(mod))
+			APICALL(LoadLibraryW_T)(mod);
+
+	LDR_DATA_TABLE_ENTRY list = { 0, };
+	while (GetNextModule(&list))
+		RebirthModule(hmodule, *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4)));
+#endif
+}
+
+BOOL CheckProcessPolicy()
+{
+	if (RG_PROCESS_POLICY & PROCESS_CREATION_MITIGATION_POLICY_STRICT_HANDLE_CHECKS_ALWAYS_ON)
+	{
+		PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY shcp;
+		GetProcessMitigationPolicy(CURRENT_PROCESS, ProcessStrictHandleCheckPolicy, &shcp, sizeof(shcp));
+
+		if (!shcp.Flags)
+			return FALSE;
+	}
+
+	/*
+		...
+	*/
+
+	return TRUE;
+}
+
+VOID SetProcessPolicy()
+{
+	SIZE_T size = 0;
+	InitializeProcThreadAttributeList(NULL, 1, 0, &size);
+
+	LPPROC_THREAD_ATTRIBUTE_LIST attr = (LPPROC_THREAD_ATTRIBUTE_LIST)AllocMemory(NULL, size, PAGE_READWRITE);
+	InitializeProcThreadAttributeList(attr, 1, 0, &size);
+
+	DWORD64 policy = RG_PROCESS_POLICY;
+	UpdateProcThreadAttribute(attr, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &policy, sizeof(policy), NULL, NULL);
+
+	PROCESS_INFORMATION pi;
+	STARTUPINFOEX si = { sizeof(si) };
+	si.StartupInfo.cb = sizeof(si);
+	si.lpAttributeList = attr;
+	APICALL(CreateProcessW_T)(NULL, GetCommandLineW(), NULL, NULL, NULL, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi);
+	FreeMemory(attr);
+
+	APICALL(NtTerminateProcess_T)(CURRENT_PROCESS, 0);
 }

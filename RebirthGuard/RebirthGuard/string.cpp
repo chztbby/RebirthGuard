@@ -33,7 +33,7 @@ LPCWSTR RG_wcsistr(LPCWSTR s1, LPCWSTR s2)
 				if (ms != msub) break;
 			}
 
-			if (*sub == 0)
+			if (!*sub)
 				return s1;
 		}
 	}

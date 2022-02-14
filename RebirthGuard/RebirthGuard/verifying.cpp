@@ -6,9 +6,9 @@
 #include "RebirthGuard.h"
 
 
-BOOL IsRebirthed(HANDLE process, PVOID module_base)
+BOOL IsRebirthed(PVOID module_base)
 {
-	PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
+	/*PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
 	PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
 
 	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; ++i)
@@ -17,9 +17,9 @@ BOOL IsRebirthed(HANDLE process, PVOID module_base)
 		{
 			PSAPI_WORKING_SET_EX_INFORMATION wsi;
 			wsi.VirtualAddress = GetPtr(module_base, sec[i].VirtualAddress);
-			APICALL(NtQueryVirtualMemory_T)(process, module_base, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
+			QueryMemory(module_base, &wsi, sizeof(wsi), MemoryWorkingSetExList);
 
-			if (wsi.VirtualAttributes.Locked == 0)
+			if (!wsi.VirtualAttributes.Locked)
 				return FALSE;
 
 			if (*((BYTE*)&wsi.VirtualAttributes.Flags + 2) != 0x40)
@@ -27,23 +27,25 @@ BOOL IsRebirthed(HANDLE process, PVOID module_base)
 
 			break;
 		}
-	}
+	}*/
 
-	return TRUE;
+	MEMORY_BASIC_INFORMATION mbi;
+	QueryMemory(module_base, &mbi, sizeof(mbi), MemoryBasicInformation);
+	if (mbi.Type == MEM_MAPPED)
+		return TRUE;
+
+	return FALSE;
 }
 
-PVOID IsInModule(HANDLE process, PVOID ptr, DWORD type)
+PVOID IsInModule(PVOID ptr, DWORD type)
 {
-	LDR_DATA_TABLE_ENTRY list;
-	*(PVOID*)&list = 0;
+	LDR_DATA_TABLE_ENTRY list = { 0, };
 
-	for (DWORD i = 0; GetNextModule(process, &list); ++i)
+	for (DWORD i = 0; GetNextModule(&list); ++i)
 	{
 		PVOID module_base = *(PVOID*)GetPtr(&list, sizeof(PVOID) * 4);
 
-		PVOID pe_header = GetPEHeader(process, module_base);
-		SIZE_T pe_header_size = PAGE_SIZE;
-		PIMAGE_NT_HEADERS nt = GetNtHeader(pe_header);
+		PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
 		PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
 
 		SIZE_T execute_size = 0;
@@ -64,17 +66,10 @@ PVOID IsInModule(HANDLE process, PVOID ptr, DWORD type)
 			result = module_base;
 
 		if (type == 2 && (SIZE_T)module_base <= (SIZE_T)ptr && (SIZE_T)ptr < (SIZE_T)module_base + (SIZE_T)nt->OptionalHeader.SizeOfImage)
-			result = (PVOID)i;
-
-		if (process != CURRENT_PROCESS)
-			APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &pe_header, &pe_header_size, MEM_RELEASE);
+			result = (PVOID)(SIZE_T)i;
 
 		if (result != (PVOID)-1)
 			return result;
-
-		/*
-			Release pe_header
-		*/
 	}
 
 	return (PVOID)-1;
@@ -93,52 +88,52 @@ BOOL IsSameFunction(PVOID f1, PVOID f2)
 
 VOID CheckThread(PVOID start_address, DWORD type)
 {
-#if RG_OPT_ANTI_DEBUGGING & RG_ENABLE
+#if IS_ENABLED(RG_OPT_ANTI_DEBUGGING)
 	APICALL(NtSetInformationThread_T)(CURRENT_THREAD, ThreadHideFromDebugger, NULL, NULL);
 #endif
 
 	MEMORY_BASIC_INFORMATION mbi;
-	APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, start_address, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+	QueryMemory(start_address, &mbi, sizeof(mbi), MemoryBasicInformation);
 
-	if (IsInModule(CURRENT_PROCESS, start_address, 0) == (PVOID)-1)
-		Report(CURRENT_PROCESS, RG_OPT_THREAD_CHECK, REPORT_THREAD_START_ADDRESS, start_address, (PVOID)type);
+	if (IsInModule(start_address, 0) == (PVOID)-1)
+		Report(RG_OPT_THREAD_CHECK, REPORT_THREAD_START_ADDRESS, start_address, (PVOID)(SIZE_T)type);
 
 	if (mbi.Protect == PAGE_EXECUTE_READWRITE || mbi.Protect == PAGE_EXECUTE_WRITECOPY)
-		Report(CURRENT_PROCESS, RG_OPT_THREAD_CHECK, REPORT_THREAD_PROTECTION, start_address, (PVOID)type);
+		Report(RG_OPT_THREAD_CHECK, REPORT_THREAD_PROTECTION, start_address, (PVOID)(SIZE_T)type);
 
-#if RG_OPT_ANTI_DLL_INJECTION & RG_ENABLE
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryA_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryA, start_address, (PVOID)type);
+#if IS_ENABLED(RG_OPT_ANTI_DLL_INJECTION)
+	if (IsSameFunction(GetApi(MODULE_KERNEL32, API_LoadLibraryA_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryW_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryW, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNEL32, API_LoadLibraryW_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExA_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExA, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNEL32, API_LoadLibraryExA_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNEL32, API_LoadLibraryExW_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExW, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNEL32, API_LoadLibraryExW_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryA_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryA, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNELBASE, API_LoadLibraryA_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryW_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryW, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNELBASE, API_LoadLibraryW_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExA_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExA, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNELBASE, API_LoadLibraryExA_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_KERNELBASE, API_LoadLibraryExW_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_KERNELBASE, API_LoadLibraryExW_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(ApiCall(MODULE_NTDLL, API_LdrLoadDll_T), start_address))
-		Report(CURRENT_PROCESS, RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_NTDLL_LdrLoadDll, start_address, (PVOID)type);
+	if (IsSameFunction(GetApi(MODULE_NTDLL, API_LdrLoadDll_T), start_address))
+		Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_NTDLL_LdrLoadDll, start_address, (PVOID)(SIZE_T)type);
 #endif
 }
 
 VOID CheckFullMemory()
 {
-#if RG_OPT_MEMORY_CHECK & RG_ENABLE
+#if IS_ENABLED(RG_OPT_MEMORY_CHECK)
 #ifdef _WIN64
 	for (PVOID ptr = 0; ptr < (PVOID)0x7FFFFFFFFFFF;)
 #else
@@ -146,14 +141,13 @@ VOID CheckFullMemory()
 #endif
 	{
 		MEMORY_BASIC_INFORMATION mbi;
-		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
-
+		QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
 		CheckMemory(ptr);
 
 		ptr = GetPtr(ptr, mbi.RegionSize);
 	}
 
-#if RG_OPT_CRC_CHECK & RG_ENABLE
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK)
 	CheckCRC();
 #endif
 #endif
@@ -162,54 +156,53 @@ VOID CheckFullMemory()
 VOID CheckMemory(PVOID ptr)
 {
 	MEMORY_BASIC_INFORMATION mbi;
-	APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+	QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
 
 	if (mbi.Type == MEM_IMAGE && !(mbi.Protect & PAGE_WRITECOPY))
-		Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_IMAGE, ptr, (PVOID)0);
+		Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_IMAGE, ptr, (PVOID)0);
 
-	else if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && IsInModule(CURRENT_PROCESS, ptr, 2) == (PVOID)-1)
-		Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_PRIVATE_EXECUTE, ptr, (PVOID)0);
+	else if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && IsInModule(ptr, 2) == (PVOID)-1)
+		Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_PRIVATE_EXECUTE, ptr, (PVOID)0);
 
-	else if (mbi.Protect == PAGE_EXECUTE_WRITECOPY && IsRebirthed(CURRENT_PROCESS, ptr) == FALSE)
-		Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_NOT_REBIRTHED, ptr, (PVOID)0);
+	else if (mbi.Protect == PAGE_EXECUTE_WRITECOPY && !IsRebirthed(ptr))
+		Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_NOT_REBIRTHED, ptr, (PVOID)0);
 
 	else if (mbi.Protect == PAGE_EXECUTE_READWRITE || mbi.Protect == PAGE_EXECUTE_WRITECOPY)
-		Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_EXECUTE_WRITE, ptr, (PVOID)0);
+		Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_EXECUTE_WRITE, ptr, (PVOID)0);
 
-	else if (mbi.Protect == PAGE_EXECUTE_READ || (IsInModule(CURRENT_PROCESS, ptr, 1) == RG_GetModuleHandleEx(CURRENT_PROCESS, NULL)))
+	else if (mbi.Protect == PAGE_EXECUTE_READ || (IsInModule(ptr, 1) == RG_GetModuleHandleW(GetModulePath(MODULE_EXE))))
 	{
 		PSAPI_WORKING_SET_EX_INFORMATION wsi;
 		wsi.VirtualAddress = ptr;
-		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, MemoryWorkingSetExList, &wsi, sizeof(wsi), 0);
+		QueryMemory(ptr, &wsi, sizeof(wsi), MemoryWorkingSetExList);
 
-		if (wsi.VirtualAttributes.Locked == 0)
-			Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED, ptr, (PVOID)0);
+		if (!wsi.VirtualAttributes.Locked)
+			Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED, ptr, (PVOID)0);
 
 		else if (*((BYTE*)&wsi.VirtualAttributes.Flags + 2) != 0x40)
-			Report(CURRENT_PROCESS, RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED2, ptr, (PVOID)0);
+			Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED2, ptr, (PVOID)0);
 	}
 }
 
 VOID CheckCRC()
 {
-	LDR_DATA_TABLE_ENTRY list;
-	*(PVOID*)&list = 0;
+	LDR_DATA_TABLE_ENTRY list = { 0, };
 
-	for (DWORD i = 0; GetNextModule(CURRENT_PROCESS, &list); i++)
+	for (DWORD i = 0; GetNextModule(&list); i++)
 	{
-		PVOID module_base = RG_GetModuleHandleEx(CURRENT_PROCESS, list.FullDllName.Buffer);
+		PVOID module_base = RG_GetModuleHandleW(list.FullDllName.Buffer);
 		LPWSTR module_path = (LPWSTR)*(PVOID*)GetPtr(&list, 0x40);
 
 		MEMORY_BASIC_INFORMATION mbi;
-		APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, module_base, MemoryBasicInformation, &mbi, sizeof(mbi), 0);
+		QueryMemory(module_base, &mbi, sizeof(mbi), MemoryBasicInformation);
 
 		if (!(mbi.Protect & PAGE_WRITECOPY))
 		{
-#if RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
 			for (int i = 0;; i++)
 			{
-				if (rebirthed_module_list[i].module_base == NULL)
-					Report(CURRENT_PROCESS, RG_OPT_CRC_CHECK, REPORT_CRC64_SECTION, module_base, 0);
+				if (!rebirthed_module_list[i].module_base)
+					Report(RG_OPT_INTEGRITY_CHECK, REPORT_INTEGRITY_SECTION_CHECK, module_base, 0);
 
 				if (rebirthed_module_list[i].module_base == module_base)
 				{
@@ -231,28 +224,31 @@ VOID CheckCRC()
 #endif
 			PVOID mapped_module = ManualMap(module_path);
 #ifdef _WIN64
-#if RG_OPT_THREAD_CHECK & RG_ENABLE
+#if IS_ENABLED(RG_OPT_THREAD_CHECK)
 			if (i == MODULE_NTDLL)
 			{
-				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleEx(CURRENT_PROCESS, GetModulePath(MODULE_NTDLL)), APICALL(RtlUserThreadStart_T));
+				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleW(GetModulePath(MODULE_NTDLL)), APICALL(RtlUserThreadStart_T));
 				BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
 				*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
 				for (DWORD i = 0; i < 14; i++)
 					*(BYTE*)GetPtr(mapped_module, RtlUserThreadStart_offset + i) = jmp_myRtlUserThreadStart[i];
 			}
 #endif
+#else
+#if IS_ENABLED(RG_OPT_THREAD_CHECK)
+
 #endif
-			(GetNtHeader(mapped_module))->OptionalHeader.ImageBase = (SIZE_T)RG_GetModuleHandleEx(CURRENT_PROCESS, module_path);
+#endif
+			(GetNtHeader(mapped_module))->OptionalHeader.ImageBase = (SIZE_T)RG_GetModuleHandleW(module_path);
 
 			if (CRC64(module_base) != CRC64(mapped_module))
-				Report(CURRENT_PROCESS, RG_OPT_CRC_CHECK, REPORT_CRC64_INTEGRITY, RG_GetModuleHandleEx(CURRENT_PROCESS, list.FullDllName.Buffer), 0);
+				Report(RG_OPT_INTEGRITY_CHECK, REPORT_INTEGRITY_CRC64_CHECK, RG_GetModuleHandleW(list.FullDllName.Buffer), 0);
 
-#if RG_OPT_CRC_HIDE_FROM_DEBUGGER & RG_ENABLE
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
 			APICALL(NtUnmapViewOfSection_T)(CURRENT_PROCESS, module_base);
 #endif
 
-			SIZE_T image_size = NULL;
-			APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &mapped_module, &image_size, MEM_RELEASE);
+			FreeMemory(mapped_module);
 		}
 	}
 }

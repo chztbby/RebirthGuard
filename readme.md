@@ -1,13 +1,13 @@
 # RebirthGuard
 
-### Windows anti-cheat library
+### Anti-cheat library for Windows C++
 
 ## :page_facing_up: Features
-* __Module remapping__ (Force page protection)
+* __Module remapping__
 * __Thread filtering__
-* __Hide module list__
+* __Module hidding__
 * __Memory check__
-* __CRC check__ (Hide from debugger)
+* __Integrity check__
 * __Anti-DLL Injection__
 * __Anti-Debugging__
 * __Process policy__
@@ -30,14 +30,17 @@
 
 int main(void)
 {
-	printf("Hello RebirthGuard!\n");
+	CheckRebirthGuard();
+
+	printf("Hello RebirthGuard SampleEXE!\n");
+
+	LoadLibraryA("SampleDLL.dll");
 
 	getchar();
 
 	return 0;
 }
 ```
-
 
 ## :mag: References
 * [Self-Remapping-Code](https://github.com/changeofpace/Self-Remapping-Code)

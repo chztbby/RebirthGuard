@@ -101,6 +101,7 @@
       <DebugInformationFormat>None</DebugInformationFormat>
       <ErrorReporting>None</ErrorReporting>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
