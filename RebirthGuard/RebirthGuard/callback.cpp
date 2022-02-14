@@ -29,22 +29,22 @@ VOID WINAPI ThreadCallback(PTHREAD_START_ROUTINE proc, PVOID param)
 VOID DebugCallback(PEXCEPTION_POINTERS e)
 {
 	if (e->ContextRecord->Dr0)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_0, (PVOID)e->ContextRecord->Dr0, (PVOID)e->ContextRecord->Dr7);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_0, (PVOID)e->ContextRecord->Dr0, (PVOID)e->ContextRecord->Dr7);
 	else if (e->ContextRecord->Dr1)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_1, (PVOID)e->ContextRecord->Dr1, (PVOID)e->ContextRecord->Dr7);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_1, (PVOID)e->ContextRecord->Dr1, (PVOID)e->ContextRecord->Dr7);
 	else if (e->ContextRecord->Dr2)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_2, (PVOID)e->ContextRecord->Dr2, (PVOID)e->ContextRecord->Dr7);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_2, (PVOID)e->ContextRecord->Dr2, (PVOID)e->ContextRecord->Dr7);
 	else if (e->ContextRecord->Dr3)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_3, (PVOID)e->ContextRecord->Dr3, (PVOID)e->ContextRecord->Dr7);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_HW_BREAKPOINT_3, (PVOID)e->ContextRecord->Dr3, (PVOID)e->ContextRecord->Dr7);
 
 	else if (e->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_SW_BREAKPOINT, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_SW_BREAKPOINT, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
 
 	else if (e->ExceptionRecord->ExceptionCode == STATUS_SINGLE_STEP)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_SINGLE_STEP, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_SINGLE_STEP, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
 
 	else if (e->ExceptionRecord->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION)
-		Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_PAGE_GUARD, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
+		RG_Report(RG_OPT_ANTI_DEBUGGING, REPORT_DEBUG_PAGE_GUARD, (PVOID)e->ExceptionRecord->ExceptionAddress, (PVOID)e->ExceptionRecord->ExceptionInformation[1]);
 }
 
 VOID CALLBACK DllCallback(ULONG reason, PLDR_DLL_NOTIFICATION_DATA data, PVOID context)

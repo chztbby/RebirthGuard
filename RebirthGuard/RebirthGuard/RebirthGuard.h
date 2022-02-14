@@ -26,7 +26,7 @@
 #define GetPtr(base, offset) ((PVOID)((SIZE_T)(base) + (SIZE_T)(offset)))
 #define GetOffset(src, dst) ((SIZE_T)((SIZE_T)(dst) - (SIZE_T)(src)))
 #define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)(base) + (SIZE_T)((PIMAGE_DOS_HEADER)(base))->e_lfanew))
-#define APICALL(api) ((api)GetApi(API_##api))
+#define APICALL(api) ((api)RG_GetApi(API_##api))
 #define IS_ENABLED(OPTION) (OPTION & RG_ENABLE)
 
 #define SEC_NO_CHANGE 0x00400000
@@ -205,7 +205,7 @@ enum PE_TYPE
 	PE_MEMORY
 };
 
-// main.cpp
+// RebirthGuard.cpp
 VOID RG_Initialze(PVOID hmodule);
 DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule);
 VOID Rebirth(PVOID hmodule);
@@ -213,31 +213,38 @@ VOID RebirthAll(PVOID hmodule);
 BOOL CheckProcessPolicy();
 VOID SetProcessPolicy();
 
-// function.cpp
+// util.cpp
+LPWSTR RG_GetModulePath(DWORD module_index);
+PVOID RG_GetNextModule(PLDR_DATA_TABLE_ENTRY plist);
+VOID RG_HideModule(PVOID hmodule);
+FARPROC RG_GetApi(API_INDEX api_index);
+FARPROC RG_GetApi(DWORD module_index, API_INDEX api_index);
+HMODULE RG_GetModuleHandleW(LPCWSTR module_path);
+HANDLE RG_CreateThread(PVOID entry, PVOID param);
+PVOID RG_AllocMemory(PVOID ptr, SIZE_T size, DWORD protect);
+VOID RG_FreeMemory(PVOID ptr);
+DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect);
+VOID RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
+LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e);
+VOID RG_SetCallbacks();
 BOOL IsExe(PVOID hmodule);
 PVOID GetCurrentThreadStartAddress();
-LPWSTR GetModulePath(DWORD module_index);
-PVOID GetNextModule(PLDR_DATA_TABLE_ENTRY plist);
-VOID HideModule(PVOID hmodule);
-HMODULE RG_GetModuleHandleW(LPCWSTR module_path);
-FARPROC GetApi(API_INDEX api_index);
-FARPROC GetApi(DWORD module_index, API_INDEX api_index);
-VOID RG_DebugLog(LPCWSTR format, ...);
-VOID Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2);
 VOID CopyPeData(PVOID dst, PVOID src, PE_TYPE src_type);
-PVOID AllocMemory(PVOID ptr, SIZE_T size, DWORD protect);
-VOID FreeMemory(PVOID ptr);
-DWORD ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect);
-VOID QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
-HANDLE RG_CreateThread(PVOID entry, PVOID param);
-VOID RG_SetCallbacks();
+
+// log.cpp
+VOID RG_DebugLog(LPCWSTR format, ...);
+VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2);
 
 // mapping.cpp
+VOID RebirthModule(PVOID hmodule, PVOID module_base);
 PVOID LoadFile(PVOID module_base);
 PVOID ManualMap(PVOID module_base);
 VOID ExtendWorkingSet();
 VOID AddRebirthedModule(PVOID module_base, HANDLE section);
-VOID RebirthModule(PVOID hmodule, PVOID module_base);
+VOID MapAllSections(PMAP_INFO info);
+VOID MapChunk(PMAP_INFO info, SIZE_T offset, SIZE_T size, DWORD chr);
+DWORD GetProtection(DWORD chr);
+DWORD GetNoChange(DWORD chr);
 
 // verifying.cpp
 BOOL IsRebirthed(PVOID module_base);

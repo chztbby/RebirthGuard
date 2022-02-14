@@ -37,11 +37,11 @@ DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule)
 VOID Rebirth(PVOID hmodule)
 {
 #if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
-	AllocMemory((PVOID)REBIRTHED_MODULE_LIST_PTR, REBIRTHED_MODULE_LIST_SIZE, PAGE_READWRITE);
+	RG_AllocMemory((PVOID)REBIRTHED_MODULE_LIST_PTR, REBIRTHED_MODULE_LIST_SIZE, PAGE_READWRITE);
 #endif
 #if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
 	PIMAGE_NT_HEADERS nt = GetNtHeader(hmodule);
-	PVOID mapped_module = AllocMemory(NULL, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE);
+	PVOID mapped_module = RG_AllocMemory(NULL, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE);
 	CopyPeData(mapped_module, hmodule, PE_MEMORY);
 #else
 	PVOID mapped_module = ManualMap(hmodule);
@@ -49,7 +49,7 @@ VOID Rebirth(PVOID hmodule)
 	auto pRebirthModule = decltype (&RebirthModule)GetPtr(mapped_module, GetOffset(hmodule, RebirthModule));
 	pRebirthModule(hmodule, hmodule);
 
-	FreeMemory(mapped_module);
+	RG_FreeMemory(mapped_module);
 
 #if IS_ENABLED(RG_OPT_REBIRTH_ALL_MODULES)
 	RebirthAll(hmodule);
@@ -64,7 +64,7 @@ VOID RebirthAll(PVOID hmodule)
 			APICALL(LoadLibraryW_T)(mod);
 
 	LDR_DATA_TABLE_ENTRY list = { 0, };
-	while (GetNextModule(&list))
+	while (RG_GetNextModule(&list))
 		RebirthModule(hmodule, *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4)));
 #endif
 }
@@ -92,7 +92,7 @@ VOID SetProcessPolicy()
 	SIZE_T size = 0;
 	InitializeProcThreadAttributeList(NULL, 1, 0, &size);
 
-	LPPROC_THREAD_ATTRIBUTE_LIST attr = (LPPROC_THREAD_ATTRIBUTE_LIST)AllocMemory(NULL, size, PAGE_READWRITE);
+	LPPROC_THREAD_ATTRIBUTE_LIST attr = (LPPROC_THREAD_ATTRIBUTE_LIST)RG_AllocMemory(NULL, size, PAGE_READWRITE);
 	InitializeProcThreadAttributeList(attr, 1, 0, &size);
 
 	DWORD64 policy = RG_PROCESS_POLICY;
@@ -103,7 +103,7 @@ VOID SetProcessPolicy()
 	si.StartupInfo.cb = sizeof(si);
 	si.lpAttributeList = attr;
 	APICALL(CreateProcessW_T)(NULL, GetCommandLineW(), NULL, NULL, NULL, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi);
-	FreeMemory(attr);
+	RG_FreeMemory(attr);
 
 	APICALL(NtTerminateProcess_T)(CURRENT_PROCESS, 0);
 }

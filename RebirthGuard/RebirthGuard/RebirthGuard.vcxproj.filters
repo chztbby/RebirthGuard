@@ -14,9 +14,6 @@
     <ClCompile Include="callback.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="function.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="mapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -30,6 +27,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RebirthGuard.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="log.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

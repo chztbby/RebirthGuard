@@ -13,7 +13,8 @@
   <ItemGroup>
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="crypto.cpp" />
-    <ClCompile Include="function.cpp" />
+    <ClCompile Include="util.cpp" />
+    <ClCompile Include="log.cpp" />
     <ClCompile Include="RebirthGuard.cpp" />
     <ClCompile Include="mapping.cpp" />
     <ClCompile Include="verifying.cpp" />
