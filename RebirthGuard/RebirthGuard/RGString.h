@@ -36,6 +36,6 @@ public:
 };
 
 #define MIS(s) (std::make_index_sequence<ARRAYSIZE(s)>())
-#define XES(s) ([]{ constexpr RGString<ARRAYSIZE(s), std::decay<decltype(*s)>::type, __LINE__> t(s, MIS(s)); return t; }().Get(MIS(s)))
+#define RGS(s) ([]{ constexpr RGString<ARRAYSIZE(s), std::decay<decltype(*s)>::type, __LINE__> t(s, MIS(s)); return t; }().Get(MIS(s)))
 
 #endif

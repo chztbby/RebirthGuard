@@ -9,7 +9,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
 	switch (fdwReason)
 	{
 	case DLL_PROCESS_ATTACH:
-		printf("Hello RebirthGuard SampleDLL!\n");
+		printf(RGS("Hello RebirthGuard SampleDLL!\n"));
 		break;
 
 	case DLL_THREAD_ATTACH:

@@ -7,6 +7,7 @@
 #define REBIRTHGUARD_SDK_H
 
 #include <Windows.h>
+#include "RGString.h"
 
 #pragma comment(linker, "/ALIGN:0x10000")
 #pragma check_stack(off)

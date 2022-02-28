@@ -8,9 +8,9 @@ int main(void)
 {
 	//CheckRebirthGuard();
 
-	printf("Hello RebirthGuard SampleEXE!\n");
+	printf(RGS("Hello RebirthGuard SampleEXE!\n"));
 
-	LoadLibraryA("SampleDLL.dll");
+	LoadLibraryA(RGS("SampleDLL.dll"));
 
 	getchar();
 

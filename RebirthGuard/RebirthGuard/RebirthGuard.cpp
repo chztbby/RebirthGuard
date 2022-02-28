@@ -59,17 +59,17 @@ VOID RebirthModules(PVOID hmodule)
 #ifdef _WIN64 // unstable in x86 yet.
 #if IS_ENABLED(RG_OPT_REBIRTH_SYSTEM_MODULES)
 	WCHAR system_modules[11][20];
-	RG_wcscpy(system_modules[0], XES(L"ntdll.dll"));
-	RG_wcscpy(system_modules[1], XES(L"kernel32.dll"));
-	RG_wcscpy(system_modules[2], XES(L"kernelbase.dll"));
-	RG_wcscpy(system_modules[3], XES(L"gdi32.dll"));
-	RG_wcscpy(system_modules[4], XES(L"win32u.dll"));
-	RG_wcscpy(system_modules[5], XES(L"gdi32full.dll"));
-	RG_wcscpy(system_modules[6], XES(L"user32.dll"));
-	RG_wcscpy(system_modules[7], XES(L"ws2_32.dll"));
-	RG_wcscpy(system_modules[8], XES(L"d3d9.dll"));
-	RG_wcscpy(system_modules[9], XES(L"d3d11.dll"));
-	RG_wcscpy(system_modules[10], XES(L"dxgi.dll"));
+	RG_wcscpy(system_modules[0], RGS(L"ntdll.dll"));
+	RG_wcscpy(system_modules[1], RGS(L"kernel32.dll"));
+	RG_wcscpy(system_modules[2], RGS(L"kernelbase.dll"));
+	RG_wcscpy(system_modules[3], RGS(L"gdi32.dll"));
+	RG_wcscpy(system_modules[4], RGS(L"win32u.dll"));
+	RG_wcscpy(system_modules[5], RGS(L"gdi32full.dll"));
+	RG_wcscpy(system_modules[6], RGS(L"user32.dll"));
+	RG_wcscpy(system_modules[7], RGS(L"ws2_32.dll"));
+	RG_wcscpy(system_modules[8], RGS(L"d3d9.dll"));
+	RG_wcscpy(system_modules[9], RGS(L"d3d11.dll"));
+	RG_wcscpy(system_modules[10], RGS(L"dxgi.dll"));
 
 	for (LPCWSTR mod : system_modules)
 	{

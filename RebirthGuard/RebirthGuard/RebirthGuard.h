@@ -29,8 +29,8 @@
 #define GetOffset(src, dst) ((SIZE_T)((SIZE_T)(dst) - (SIZE_T)(src)))
 #define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)(base) + (SIZE_T)((PIMAGE_DOS_HEADER)(base))->e_lfanew))
 #define TO_STRING(param) #param
-#define APICALL(api_name) ((decltype(&api_name))RG_GetApi(XES(TO_STRING(api_name))))
-#define APICALL_FROM_MODULE(index, api_name) ((decltype(&api_name))RG_GetApi(index, XES(TO_STRING(api_name))))
+#define APICALL(api_name) ((decltype(&api_name))RG_GetApi(RGS(TO_STRING(api_name))))
+#define APICALL_FROM_MODULE(index, api_name) ((decltype(&api_name))RG_GetApi(index, RGS(TO_STRING(api_name))))
 #define IS_ENABLED(OPTION) (OPTION & RG_ENABLE)
 #define PAGE_SIZE 0x1000
 #define ALLOCATION_GRANULARITY 0x10000
