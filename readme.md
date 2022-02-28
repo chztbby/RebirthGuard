@@ -11,6 +11,7 @@
 * __Anti-DLL Injection__
 * __Anti-Debugging__
 * __Process policy__
+* __Literal string obfuscation__
 * __Compatibility with Themida/VMProtect__
 
 ## :heavy_check_mark: Dependencies
