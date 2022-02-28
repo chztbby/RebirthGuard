@@ -12,18 +12,14 @@ VOID WINAPI RG_TlsCallback(PVOID hmodule, DWORD reason, PVOID reserved)
 		RG_Initialze(hmodule);
 
 	if (reason == DLL_THREAD_ATTACH)
-	{
-#if IS_ENABLED(RG_OPT_THREAD_CHECK)
-		CheckThread(GetCurrentThreadStartAddress(), 0);
-#endif
-	}
+		CheckThread(GetCurrentThreadStartAddress(), TC_TlsCallback);
 }
 
 VOID WINAPI ThreadCallback(PTHREAD_START_ROUTINE proc, PVOID param)
 {
-	CheckThread(proc, 0x10);
+	CheckThread(proc, TC_ThreadCallback);
 
-	APICALL(NtTerminateThread_T)(CURRENT_THREAD, proc(param));
+	APICALL(NtTerminateThread)(CURRENT_THREAD, proc(param));
 }
 
 VOID DebugCallback(PEXCEPTION_POINTERS e)
@@ -49,12 +45,15 @@ VOID DebugCallback(PEXCEPTION_POINTERS e)
 
 VOID CALLBACK DllCallback(ULONG reason, PLDR_DLL_NOTIFICATION_DATA data, PVOID context)
 {
+	if (reason == LDR_DLL_NOTIFICATION_REASON_LOADED)
+	{
+		CheckThread(GetCurrentThreadStartAddress(), TC_DllCallback);
+
 #if IS_ENABLED(RG_OPT_REBIRTH_ALL_MODULES)
 #ifdef _WIN64 // unstable in x86 yet.
-	if (reason == LDR_DLL_NOTIFICATION_REASON_LOADED)
 		RebirthModule(NULL, data->Loaded.DllBase);
 #endif
 #endif
-
+	}
 	return;
 }

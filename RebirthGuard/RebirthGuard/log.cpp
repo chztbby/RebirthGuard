@@ -32,8 +32,8 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 	LDR_DATA_TABLE_ENTRY list = { 0, };
 	for (DWORD i = 0; RG_GetNextModule(&list); ++i)
 	{
-		APICALL(NtReadVirtualMemory_T)(CURRENT_PROCESS, list.FullDllName.Buffer, buffer1, MAX_PATH, NULL);
-		APICALL(NtReadVirtualMemory_T)(CURRENT_PROCESS, *(PVOID*)GetPtr(&list, sizeof(PVOID) * 8), buffer2, MAX_PATH, NULL);
+		APICALL(NtReadVirtualMemory)(CURRENT_PROCESS, list.FullDllName.Buffer, buffer1, MAX_PATH, NULL);
+		APICALL(NtReadVirtualMemory)(CURRENT_PROCESS, *(PVOID*)GetPtr(&list, sizeof(PVOID) * 8), buffer2, MAX_PATH, NULL);
 
 		if (order == (PVOID)(SIZE_T)i)
 		{
@@ -66,7 +66,7 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 	if (flag & RG_ENABLE_POPUP)
 	{
 		CHAR scriptpath[MAX_PATH];
-		GetCurrentDirectoryA(MAX_PATH, scriptpath);
+		APICALL(GetCurrentDirectoryA)(MAX_PATH, scriptpath);
 		RG_strcat(scriptpath, "\\RebirthGuard.vbs");
 
 		FILE* log = NULL;
@@ -93,19 +93,19 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 		RG_strcat(path, scriptpath);
 		RG_strcat(path, "\"");
 
-		APICALL(WinExec_T)(path, SW_SHOW);
+		APICALL(WinExec)(path, SW_SHOW);
 	}
 
 	if (flag & RG_ENABLE_MEM_FREE)
 	{
 		SIZE_T Size = NULL;
 		PVOID Address = data1;
-		APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE);
-		APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE | MEM_DECOMMIT);
+		APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE);
+		APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE | MEM_DECOMMIT);
 	}
 
 	if (flag & RG_ENABLE_KILL)
 	{
-		APICALL(NtTerminateProcess_T)(CURRENT_PROCESS, 0);
+		APICALL(NtTerminateProcess)(CURRENT_PROCESS, 0);
 	}
 }

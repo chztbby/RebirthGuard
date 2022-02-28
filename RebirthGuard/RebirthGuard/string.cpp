@@ -5,6 +5,21 @@
 
 #include "RebirthGuard.h"
 
+INT RG_strcmp(LPCSTR p1, LPCSTR p2)
+{
+	LPCSTR s1 = p1;
+	LPCSTR s2 = p2;
+	CHAR c1, c2;
+	do
+	{
+		c1 = *s1++;
+		c2 = *s2++;
+		if (c1 == '\0')
+			return c1 - c2;
+	} while (c1 == c2);
+	return c1 - c2;
+}
+
 LPSTR RG_strcat(LPSTR s1, LPCSTR s2)
 {
 	LPSTR cp = s1;

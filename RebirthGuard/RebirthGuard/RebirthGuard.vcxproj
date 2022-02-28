@@ -21,9 +21,11 @@
     <ClCompile Include="string.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ntstruct.h" />
     <ClInclude Include="RebirthGuard.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="RebirthGuardSDK.h" />
+    <ClInclude Include="RGString.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

@@ -21,6 +21,16 @@ LPWSTR RG_GetModulePath(DWORD module_index)
 	return module_path[module_index];
 }
 
+LPCWSTR RG_GetModulePath(PVOID hmodule)
+{
+    LDR_DATA_TABLE_ENTRY list = { 0, };
+	while (RG_GetNextModule(&list))
+		if (hmodule == *(PVOID*)(GetPtr(&list, sizeof(PVOID) * 4)))
+			return (LPCWSTR)*(PVOID*)(GetPtr(&list, sizeof(PVOID) * 8));
+
+	return NULL;
+}
+
 PVOID RG_GetNextModule(PLDR_DATA_TABLE_ENTRY plist)
 {
 	static LDR_DATA_TABLE_ENTRY* first = NULL;
@@ -67,33 +77,20 @@ VOID RG_HideModule(PVOID hmodule)
 #endif
 }
 
-FARPROC RG_GetApi(API_INDEX api_index)
+PVOID RG_GetApi(DWORD module_index, LPCSTR api_name)
 {
-	CHAR api_name[50];
-	DecryptXOR(api_name, api_index);
-
-	FARPROC api = NULL;
-
-	for (DWORD i = MODULE_FIRST; i <= MODULE_LAST && !api; ++i)
-		api = GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(i)), api_name);
-
-	for (DWORD i = 0; i < sizeof(api_name); i++)
-		api_name[i] = 0;
-
-	return api;
+	return RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(module_index)), api_name);
 }
 
-FARPROC RG_GetApi(DWORD module_index, API_INDEX api_index)
+PVOID RG_GetApi(LPCSTR api_name)
 {
-	CHAR api_name[50];
-	DecryptXOR(api_name, api_index);
+    PVOID api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(NTDLL)), api_name);
+    if (!api)
+        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(KERNELBASE)), api_name);
+    if (!api)
+        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(KERNEL32)), api_name);
 
-	FARPROC api = GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(module_index)), api_name);
-
-	for (DWORD i = 0; i < sizeof(api_name); i++)
-		api_name[i] = 0;
-
-	return api;
+    return api;
 }
 
 HMODULE RG_GetModuleHandleW(LPCWSTR module_path)
@@ -117,35 +114,61 @@ HMODULE RG_GetModuleHandleW(LPCWSTR module_path)
 	return NULL;
 }
 
+PVOID RG_GetProcAddress(HMODULE hmodule, LPCSTR proc_name)
+{
+	PIMAGE_NT_HEADERS pnh = GetNtHeader(hmodule);
+	PIMAGE_DATA_DIRECTORY pdd = &pnh->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+	PIMAGE_EXPORT_DIRECTORY ped = (PIMAGE_EXPORT_DIRECTORY)GetPtr(hmodule, pdd->VirtualAddress);
+
+	PDWORD func_table = (PDWORD)GetPtr(hmodule, ped->AddressOfFunctions);
+	PWORD ordinal_table = (PWORD)GetPtr(hmodule, ped->AddressOfNameOrdinals);
+
+	if ((DWORD_PTR)proc_name <= 0xFFFF)
+	{
+		WORD ordinal = (WORD)IMAGE_ORDINAL((DWORD_PTR)proc_name);
+		ordinal -= (WORD)ped->Base;
+		if (ordinal < ped->NumberOfFunctions)
+			return GetPtr(hmodule, func_table[ordinal]);
+	}
+	else
+	{
+		PDWORD func_name_table = (PDWORD)GetPtr(hmodule, ped->AddressOfNames);
+		for (DWORD i = 0; i < ped->NumberOfNames; ++i)
+			if (!RG_strcmp(proc_name, (LPCSTR)GetPtr(hmodule, func_name_table[i])))
+				return GetPtr(hmodule, func_table[ordinal_table[i]]);
+	}
+	return NULL;
+}
+
 HANDLE RG_CreateThread(PVOID entry, PVOID param)
 {
 	HANDLE thread = NULL;
-	APICALL(NtCreateThreadEx_T)(&thread, MAXIMUM_ALLOWED, NULL, CURRENT_PROCESS, entry, param, NULL, NULL, NULL, NULL, NULL);
+	APICALL(NtCreateThreadEx)(&thread, MAXIMUM_ALLOWED, NULL, CURRENT_PROCESS, entry, param, NULL, NULL, NULL, NULL, NULL);
 	return thread;
 }
 
 PVOID RG_AllocMemory(PVOID ptr, SIZE_T size, DWORD protect)
 {
-	APICALL(NtAllocateVirtualMemory_T)(CURRENT_PROCESS, &ptr, NULL, &size, MEM_COMMIT | MEM_RESERVE, protect);
+	APICALL(NtAllocateVirtualMemory)(CURRENT_PROCESS, &ptr, NULL, &size, MEM_COMMIT | MEM_RESERVE, protect);
 	return ptr;
 }
 
 VOID RG_FreeMemory(PVOID ptr)
 {
 	SIZE_T size = NULL;
-	APICALL(NtFreeVirtualMemory_T)(CURRENT_PROCESS, &ptr, &size, MEM_RELEASE);
+	APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &ptr, &size, MEM_RELEASE);
 }
 
 DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect)
 {
 	DWORD old = NULL;
-	APICALL(NtProtectVirtualMemory_T)(CURRENT_PROCESS, &ptr, &size, protect, &old);
+	APICALL(NtProtectVirtualMemory)(CURRENT_PROCESS, &ptr, &size, protect, &old);
 	return old;
 }
 
 VOID RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type)
 {
-	APICALL(NtQueryVirtualMemory_T)(CURRENT_PROCESS, ptr, type, buffer, buffer_size, NULL);
+	APICALL(NtQueryVirtualMemory)(CURRENT_PROCESS, ptr, type, buffer, buffer_size, NULL);
 }
 
 LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e)
@@ -158,10 +181,10 @@ LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e)
 
 VOID RG_SetCallbacks()
 {
-	APICALL(RtlAddVectoredExceptionHandler_T)(1, RG_ExceptionHandler);
+	APICALL(RtlAddVectoredExceptionHandler)(1, RG_ExceptionHandler);
 
 	PVOID cookie = NULL;
-	APICALL(LdrRegisterDllNotification_T)(NULL, DllCallback, NULL, &cookie);
+	APICALL(LdrRegisterDllNotification)(NULL, DllCallback, NULL, &cookie);
 	cookie = NULL;
 }
 
@@ -173,7 +196,7 @@ BOOL IsExe(PVOID hmodule)
 PVOID GetCurrentThreadStartAddress()
 {
 	PVOID start_address = NULL;
-	APICALL(NtQueryInformationThread_T)(CURRENT_THREAD, ThreadQuerySetWin32StartAddress, &start_address, sizeof(start_address), 0);
+	APICALL(NtQueryInformationThread)(CURRENT_THREAD, (THREADINFOCLASS)ThreadQuerySetWin32StartAddress, &start_address, sizeof(start_address), 0);
 
 	return start_address;
 }
@@ -187,10 +210,10 @@ VOID CopyPeData(PVOID dst, PVOID src, PE_TYPE src_type)
 
 	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; i++)
 	{
-		if (src_type == PE_MEMORY)
+		if (src_type == PE_TYPE_IMAGE)
 			memcpy(GetPtr(dst, sec[i].VirtualAddress), GetPtr(src, sec[i].VirtualAddress), sec[i].Misc.VirtualSize);
 
-		if (src_type == PE_FILE)
+		if (src_type == PE_TYPE_FILE)
 			memcpy(GetPtr(dst, sec[i].VirtualAddress), GetPtr(src, sec[i].PointerToRawData), sec[i].SizeOfRawData);
 	}
 }
