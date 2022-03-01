@@ -6,8 +6,6 @@
 
 int main(void)
 {
-	//CheckRebirthGuard();
-
 	printf(RGS("Hello RebirthGuard SampleEXE!\n"));
 
 	LoadLibraryA(RGS("SampleDLL.dll"));

@@ -8,26 +8,23 @@
 
 #include <array>
 
-template <DWORD N, typename T, DWORD key>
+template <typename T, SIZE_T N, SIZE_T K>
 class RGString
 {
 private:
     std::array<T, N> str_;
 
-    constexpr T Xor(T c) const
+    __forceinline constexpr T Xor(T c) const
     {
-        return c ^ key;
+        return c ^ K;
     }
 
 public:
-    template <DWORD... IS>
-    constexpr RGString(const T* str, std::index_sequence<IS...>)
-    {
-        str_ = { Xor(str[IS])... };
-    }
+    template <SIZE_T... IS>
+    __forceinline constexpr RGString(const T* str, std::index_sequence<IS...>) : str_{ Xor(str[IS])... } {};
 
-    template <DWORD... IS>
-    const T* Get(std::index_sequence<IS...>)
+    template <SIZE_T... IS>
+    __forceinline const T* Get(std::index_sequence<IS...>)
     {
         str_ = { Xor(str_[IS])... };
 
@@ -36,6 +33,6 @@ public:
 };
 
 #define MIS(s) (std::make_index_sequence<ARRAYSIZE(s)>())
-#define RGS(s) ([]{ constexpr RGString<ARRAYSIZE(s), std::decay<decltype(*s)>::type, __LINE__> t(s, MIS(s)); return t; }().Get(MIS(s)))
+#define RGS(s) ([]{ constexpr RGString<std::decay<decltype(*s)>::type, ARRAYSIZE(s), __LINE__> t(s, MIS(s)); return t; }().Get(MIS(s)))
 
 #endif

@@ -16,7 +16,7 @@
 
 ## :heavy_check_mark: Dependencies
 * Windows 7~11
-* Visual Studio C++
+* Visual Studio 2019
 
 ## :wrench: How to use
 1. Set options in `options.h` and build *RebirthGuard*.
@@ -32,8 +32,6 @@
 
 int main(void)
 {
-	CheckRebirthGuard();
-
 	printf(RGS("Hello RebirthGuard SampleEXE!\n"));
 
 	LoadLibraryA(RGS("SampleDLL.dll"));
