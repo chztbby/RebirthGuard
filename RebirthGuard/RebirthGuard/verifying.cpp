@@ -27,42 +27,42 @@ BOOL IsRebirthed(PVOID module_base)
 	return TRUE;
 }
 
-PVOID IsInModule(PVOID ptr, DWORD type)
+PVOID GetModuleBaseFromPtr(PVOID ptr, PTR_CHECK type)
 {
 	LDR_DATA_TABLE_ENTRY list = { 0, };
 
 	for (DWORD i = 0; RG_GetNextModule(&list); ++i)
 	{
 		PVOID module_base = *(PVOID*)GetPtr(&list, sizeof(PVOID) * 4);
-
 		PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
-		PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
+		PVOID sptr;
+		PVOID eptr;
 
-		SIZE_T execute_size = 0;
-		for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; ++i)
+		if (type == PC_EXECUTABLE)
 		{
-			if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
-				execute_size += PADDING(sec[i].Misc.VirtualSize, nt->OptionalHeader.SectionAlignment);
-			else
-				break;
+			PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
+			for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; ++i)
+			{
+                if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+                {
+					sptr = GetPtr(module_base, sec[i].VirtualAddress);
+					eptr = GetPtr(sptr, sec[i].Misc.VirtualSize);
+                    if (sptr <= ptr && ptr < eptr)
+                        return module_base;
+				}
+			}
 		}
 
-		PVOID result = (PVOID)-1;
-
-		if (type == 0 && (SIZE_T)module_base + (SIZE_T)nt->OptionalHeader.SectionAlignment <= (SIZE_T)ptr && (SIZE_T)ptr < (SIZE_T)module_base + (SIZE_T)nt->OptionalHeader.SectionAlignment + execute_size)
-			result = module_base;
-
-		if (type == 1 && (SIZE_T)module_base <= (SIZE_T)ptr && (SIZE_T)ptr < (SIZE_T)module_base + (SIZE_T)nt->OptionalHeader.SizeOfImage)
-			result = module_base;
-
-		if (type == 2 && (SIZE_T)module_base <= (SIZE_T)ptr && (SIZE_T)ptr < (SIZE_T)module_base + (SIZE_T)nt->OptionalHeader.SizeOfImage)
-			result = (PVOID)(SIZE_T)i;
-
-		if (result != (PVOID)-1)
-			return result;
+		if (type == PC_IMAGE_SIZE)
+		{
+			sptr = module_base;
+			eptr = GetPtr(sptr, nt->OptionalHeader.SizeOfImage);
+			if (sptr <= ptr && ptr < eptr)
+				return module_base;
+		}
 	}
 
-	return (PVOID)-1;
+	return nullptr;
 }
 
 BOOL IsSameFunction(PVOID f1, PVOID f2)
@@ -84,7 +84,7 @@ VOID CheckThread(PVOID start_address, THREAD_CHECK type)
 
 	if (IS_ENABLED(RG_OPT_THREAD_CHECK) || (type == TC_DllCallback && IS_ENABLED(RG_OPT_ANTI_DLL_INJECTION)))
 	{
-		if (IsInModule(start_address, 0) == (PVOID)-1)
+		if (!GetModuleBaseFromPtr(start_address, PC_EXECUTABLE))
 			RG_Report(type == TC_DllCallback ? RG_OPT_ANTI_DLL_INJECTION : RG_OPT_THREAD_CHECK, REPORT_THREAD_START_ADDRESS, start_address, (PVOID)(SIZE_T)type);
 
 		MEMORY_BASIC_INFORMATION mbi;
@@ -136,7 +136,7 @@ VOID CheckMemory()
 		MEMORY_BASIC_INFORMATION mbi;
 		RG_QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
 
-		if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && IsInModule(ptr, 2) == (PVOID)-1)
+		if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && !IsInModule(ptr, PC_IMAGE_SIZE))
         {
             BYTE buffer[PAGE_SIZE] = { 0, };
             NTSTATUS ns = RG_QueryMemory(ptr, buffer, sizeof(buffer), MemoryMappedFilenameInformation);
@@ -151,7 +151,7 @@ VOID CheckMemory()
 	{
         PVOID module_base = rgdata->rmi[i].module_base;
 		if (!IsRebirthed(module_base))
-			RG_Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_NOT_REBIRTHED, module_base, 0);
+			RG_Report(RG_OPT_MEMORY_CHECK, REPORT_MEMORY_UNLOCKED, module_base, 0);
 	}
 #endif
 }

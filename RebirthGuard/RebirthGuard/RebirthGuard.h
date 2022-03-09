@@ -83,9 +83,7 @@ enum RG_REPORT_CODE
 	REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW,
 	REPORT_DLL_INJECTION_NTDLL_LdrLoadDll,
 	REPORT_MEMORY_SUSPICIOUS,
-	REPORT_MEMORY_NOT_REBIRTHED,
 	REPORT_MEMORY_UNLOCKED,
-	REPORT_MEMORY_UNLOCKED2,
 	REPORT_INTEGRITY_SECTION_CHECK,
 	REPORT_INTEGRITY_CRC64_CHECK,
 	REPORT_INVALID_APICALL,
@@ -109,6 +107,12 @@ enum THREAD_CHECK
 	TC_TlsCallback,
 	TC_ThreadCallback,
 	TC_DllCallback
+};
+
+enum PTR_CHECK
+{
+	PC_EXECUTABLE,
+	PC_IMAGE_SIZE
 };
 
 // RebirthGuard.cpp
@@ -155,7 +159,7 @@ DWORD GetNoChange(DWORD chr);
 
 // verifying.cpp
 BOOL IsRebirthed(PVOID module_base);
-PVOID IsInModule(PVOID ptr, DWORD type);
+PVOID GetModuleBaseFromPtr(PVOID ptr, PTR_CHECK type);
 BOOL IsSameFunction(PVOID f1, PVOID f2);
 VOID CheckThread(PVOID start_address, THREAD_CHECK type);
 VOID CheckMemory();

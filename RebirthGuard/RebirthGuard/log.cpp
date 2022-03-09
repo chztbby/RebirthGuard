@@ -15,8 +15,6 @@ VOID RG_DebugLog(LPCWSTR format, ...)
 
 VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 {
-	WCHAR buffer1[MAX_PATH];
-	WCHAR buffer2[MAX_PATH];
 	WCHAR module_name1[MAX_PATH] = L"";
 	WCHAR module_name2[MAX_PATH] = L"";
 	WCHAR module_path1[MAX_PATH] = L"";
@@ -26,26 +24,25 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 	tm tm;
 	localtime_s(&tm, &t);
 
-	PVOID order = IsInModule(data1, 2);
-	PVOID order2 = IsInModule(data2, 2);
+	PVOID module_base1 = GetModuleBaseFromPtr(data1, PC_IMAGE_SIZE);
+	PVOID module_base2 = GetModuleBaseFromPtr(data2, PC_IMAGE_SIZE);
 
 	LDR_DATA_TABLE_ENTRY list = { 0, };
 	for (DWORD i = 0; RG_GetNextModule(&list); ++i)
 	{
-		APICALL(NtReadVirtualMemory)(CURRENT_PROCESS, list.FullDllName.Buffer, buffer1, MAX_PATH, NULL);
-		APICALL(NtReadVirtualMemory)(CURRENT_PROCESS, *(PVOID*)GetPtr(&list, sizeof(PVOID) * 8), buffer2, MAX_PATH, NULL);
+		PVOID current_module_base = *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4));
 
-		if (order == (PVOID)(SIZE_T)i)
+		if (module_base1 == current_module_base)
 		{
-			RG_wcscpy(module_name1, buffer1);
+			RG_wcscpy(module_name1, list.FullDllName.Buffer);
 			RG_wcscat(module_name1, L" +");
-			RG_wcscpy(module_path1, buffer2);
+			RG_wcscpy(module_path1, RG_GetModulePath(current_module_base));
 		}
-		if (order2 == (PVOID)(SIZE_T)i)
+		if (module_base2 == current_module_base)
 		{
-			RG_wcscpy(module_name2, buffer2);
+			RG_wcscpy(module_name2, list.FullDllName.Buffer);
 			RG_wcscat(module_name2, L" +");
-			RG_wcscpy(module_path2, buffer2);
+			RG_wcscpy(module_path2, RG_GetModulePath(current_module_base));
 		}
 	}
 
