@@ -113,11 +113,10 @@ enum THREAD_CHECK
 
 // RebirthGuard.cpp
 VOID RG_Initialze(PVOID hmodule);
-DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule);
 VOID Rebirth(PVOID hmodule);
 VOID RebirthModules(PVOID hmodule);
 BOOL CheckProcessPolicy();
-VOID SetProcessPolicy();
+VOID RestartProcess();
 
 // util.cpp
 LPWSTR RG_GetModulePath(DWORD module_index);

@@ -7,28 +7,10 @@
 
 VOID RG_Initialze(PVOID hmodule)
 {
-#if IS_ENABLED(RG_OPT_SET_PROCESS_POLICY)
-	if (IsExe(hmodule) && !CheckProcessPolicy())
-	{
-		SetProcessPolicy();
-	}
-	else
-#endif
-	{
-		RG_InitialzeWorker(hmodule);
-	}
-}
-
-DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule)
-{
 	if (IsRebirthed(hmodule))
-		return 0;
+		return;
 
 	Rebirth(hmodule);
-
-	RG_SetCallbacks();
-
-	return 0;
 }
 
 VOID Rebirth(PVOID hmodule)
@@ -44,14 +26,20 @@ VOID Rebirth(PVOID hmodule)
 #endif
 	auto pRebirthModule = decltype (&RebirthModule)GetPtr(mapped_module, GetOffset(hmodule, RebirthModule));
 	pRebirthModule(hmodule, hmodule);
-
 	RG_FreeMemory(mapped_module);
 
 	RebirthModules(hmodule);
 
+	RG_SetCallbacks();
+
 	CheckMemory();
 
 	CheckCRC();
+
+#if IS_ENABLED(RG_OPT_SET_PROCESS_POLICY)
+	if (IsExe(hmodule) && !CheckProcessPolicy())
+		RestartProcess();
+#endif
 }
 
 VOID RebirthModules(PVOID hmodule)
@@ -107,7 +95,7 @@ BOOL CheckProcessPolicy()
 	return TRUE;
 }
 
-VOID SetProcessPolicy()
+VOID RestartProcess()
 {
 	SIZE_T size = 0;
 	APICALL(InitializeProcThreadAttributeList)(NULL, 1, 0, &size);
