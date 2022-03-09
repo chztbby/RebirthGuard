@@ -16,7 +16,7 @@ private:
 
     __forceinline constexpr T Xor(T c) const
     {
-        return c ^ K;
+        return (T)(c ^ K);
     }
 
 public:

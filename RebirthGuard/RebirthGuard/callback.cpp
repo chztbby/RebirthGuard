@@ -8,11 +8,17 @@
 
 VOID WINAPI RG_TlsCallback(PVOID hmodule, DWORD reason, PVOID reserved)
 {
-	if (reason == DLL_PROCESS_ATTACH)
+	PVOID entry = GetCurrentThreadStartAddress();
+
+#if IS_ENABLED(RG_OPT_THREAD_CHECK)
+	CheckThread(entry, TC_TlsCallback);
+#endif
+
+	if (reason == DLL_PROCESS_ATTACH && entry != APICALL(Sleep))
 		RG_Initialze(hmodule);
 
-	if (reason == DLL_THREAD_ATTACH)
-		CheckThread(GetCurrentThreadStartAddress(), TC_TlsCallback);
+	if (reason == DLL_THREAD_DETACH && entry == APICALL(Sleep))
+		RG_Initialze(hmodule);
 }
 
 VOID WINAPI ThreadCallback(PTHREAD_START_ROUTINE proc, PVOID param)

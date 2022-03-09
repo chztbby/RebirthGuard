@@ -140,10 +140,10 @@ PVOID RG_GetProcAddress(HMODULE hmodule, LPCSTR proc_name)
 	return NULL;
 }
 
-HANDLE RG_CreateThread(PVOID entry, PVOID param)
+HANDLE RG_CreateThread(HANDLE process, PVOID entry, PVOID param)
 {
 	HANDLE thread = NULL;
-	APICALL(NtCreateThreadEx)(&thread, MAXIMUM_ALLOWED, NULL, CURRENT_PROCESS, entry, param, NULL, NULL, NULL, NULL, NULL);
+	APICALL(NtCreateThreadEx)(&thread, MAXIMUM_ALLOWED, NULL, process, entry, param, NULL, NULL, NULL, NULL, NULL);
 	return thread;
 }
 
@@ -155,8 +155,13 @@ PVOID RG_AllocMemory(PVOID ptr, SIZE_T size, DWORD protect)
 
 VOID RG_FreeMemory(PVOID ptr)
 {
-	SIZE_T size = NULL;
-	APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &ptr, &size, MEM_RELEASE);
+	MEMORY_BASIC_INFORMATION mbi;
+	RG_QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
+
+	if (mbi.Type == MEM_PRIVATE)
+		APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &mbi.AllocationBase, &mbi.RegionSize, MEM_RELEASE);
+	else
+		APICALL(NtUnmapViewOfSection)(CURRENT_PROCESS, mbi.AllocationBase);
 }
 
 DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect)
@@ -166,9 +171,9 @@ DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect)
 	return old;
 }
 
-VOID RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type)
+NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type)
 {
-	APICALL(NtQueryVirtualMemory)(CURRENT_PROCESS, ptr, type, buffer, buffer_size, NULL);
+	return APICALL(NtQueryVirtualMemory)(CURRENT_PROCESS, ptr, type, buffer, buffer_size, NULL);
 }
 
 LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e)

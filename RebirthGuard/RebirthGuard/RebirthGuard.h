@@ -7,7 +7,6 @@
 #define REBIRTHGUARD_H
 
 #include <windows.h>
-#include <winternl.h>
 #include <psapi.h>
 #include <time.h>
 #include <stdio.h>
@@ -15,8 +14,8 @@
 #include "RGString.h"
 #include "options.h"
 
-#define REBIRTHED_MODULE_LIST_PTR 0x10000
-#define REBIRTHED_MODULE_LIST_SIZE 0x1000
+#define RG_DATA_PTR 0x10000
+#define RG_DATA_SIZE 0x10000
 #define XOR_KEY 0xAD
 #define MODULE_FIRST 0
 #define EXE 0
@@ -43,7 +42,13 @@ typedef struct _REBIRTHED_MODULE_INFO
 	HANDLE section;
 } REBIRTHED_MODULE_INFO, *PREBIRTHED_MODULE_INFO;
 
-static REBIRTHED_MODULE_INFO* rebirthed_module_list = (REBIRTHED_MODULE_INFO*)REBIRTHED_MODULE_LIST_PTR;
+typedef struct _RG_DATA
+{
+	SIZE_T magic[3];
+	REBIRTHED_MODULE_INFO rmi[RG_DATA_SIZE - sizeof(magic)];
+} RG_DATA, *PRG_DATA;
+
+static PRG_DATA rgdata = (PRG_DATA)RG_DATA_PTR;
 
 typedef struct _MAP_INFO
 {
@@ -77,10 +82,8 @@ enum RG_REPORT_CODE
 	REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExA,
 	REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW,
 	REPORT_DLL_INJECTION_NTDLL_LdrLoadDll,
-	REPORT_MEMORY_IMAGE,
-	REPORT_MEMORY_PRIVATE_EXECUTE,
+	REPORT_MEMORY_SUSPICIOUS,
 	REPORT_MEMORY_NOT_REBIRTHED,
-	REPORT_MEMORY_EXECUTE_WRITE,
 	REPORT_MEMORY_UNLOCKED,
 	REPORT_MEMORY_UNLOCKED2,
 	REPORT_INTEGRITY_SECTION_CHECK,
@@ -125,11 +128,11 @@ PVOID RG_GetApi(DWORD module_index, LPCSTR api_name);
 PVOID RG_GetApi(LPCSTR api_name);
 HMODULE RG_GetModuleHandleW(LPCWSTR module_path);
 PVOID RG_GetProcAddress(HMODULE hmodule, LPCSTR proc_name);
-HANDLE RG_CreateThread(PVOID entry, PVOID param);
+HANDLE RG_CreateThread(HANDLE process, PVOID entry, PVOID param);
 PVOID RG_AllocMemory(PVOID ptr, SIZE_T size, DWORD protect);
 VOID RG_FreeMemory(PVOID ptr);
 DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect);
-VOID RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
+NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
 LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e);
 VOID RG_SetCallbacks();
 BOOL IsExe(PVOID hmodule);
@@ -156,8 +159,7 @@ BOOL IsRebirthed(PVOID module_base);
 PVOID IsInModule(PVOID ptr, DWORD type);
 BOOL IsSameFunction(PVOID f1, PVOID f2);
 VOID CheckThread(PVOID start_address, THREAD_CHECK type);
-VOID CheckFullMemory();
-VOID CheckMemory(PVOID ptr);
+VOID CheckMemory();
 VOID CheckCRC();
 
 // callback.cpp

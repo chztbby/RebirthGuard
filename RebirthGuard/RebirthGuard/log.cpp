@@ -96,16 +96,9 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 		APICALL(WinExec)(path, SW_SHOW);
 	}
 
-	if (flag & RG_ENABLE_MEM_FREE)
-	{
-		SIZE_T Size = NULL;
-		PVOID Address = data1;
-		APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE);
-		APICALL(NtFreeVirtualMemory)(CURRENT_PROCESS, &Address, &Size, MEM_RELEASE | MEM_DECOMMIT);
-	}
+	if (flag & RG_ENABLE_DEALLOC)
+		RG_FreeMemory(data1);
 
 	if (flag & RG_ENABLE_KILL)
-	{
 		APICALL(NtTerminateProcess)(CURRENT_PROCESS, 0);
-	}
 }

@@ -8,12 +8,9 @@
 VOID RG_Initialze(PVOID hmodule)
 {
 #if IS_ENABLED(RG_OPT_SET_PROCESS_POLICY)
-	if (IsExe(hmodule))
+	if (IsExe(hmodule) && !CheckProcessPolicy())
 	{
-		if (!CheckProcessPolicy())
-			SetProcessPolicy();
-		else
-			RG_CreateThread(RG_InitialzeWorker, hmodule);
+		SetProcessPolicy();
 	}
 	else
 #endif
@@ -36,9 +33,8 @@ DWORD WINAPI RG_InitialzeWorker(LPVOID hmodule)
 
 VOID Rebirth(PVOID hmodule)
 {
-#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
-	RG_AllocMemory((PVOID)REBIRTHED_MODULE_LIST_PTR, REBIRTHED_MODULE_LIST_SIZE, PAGE_READWRITE);
-#endif
+	rgdata = (PRG_DATA)RG_AllocMemory((PVOID)RG_DATA_PTR, RG_DATA_SIZE, PAGE_READWRITE);
+
 #if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
 	PIMAGE_NT_HEADERS nt = GetNtHeader(hmodule);
 	PVOID mapped_module = RG_AllocMemory(NULL, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE);
@@ -52,6 +48,10 @@ VOID Rebirth(PVOID hmodule)
 	RG_FreeMemory(mapped_module);
 
 	RebirthModules(hmodule);
+
+	CheckMemory();
+
+	CheckCRC();
 }
 
 VOID RebirthModules(PVOID hmodule)
@@ -122,8 +122,12 @@ VOID SetProcessPolicy()
 	STARTUPINFOEX si = { sizeof(si) };
 	si.StartupInfo.cb = sizeof(si);
 	si.lpAttributeList = attr;
-	APICALL(CreateProcessW)(NULL, APICALL(GetCommandLineW)(), NULL, NULL, NULL, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi);
+	APICALL(CreateProcessW)(NULL, APICALL(GetCommandLineW)(), NULL, NULL, NULL, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED, NULL, NULL, &si.StartupInfo, &pi);
 	RG_FreeMemory(attr);
+
+	HANDLE thread = RG_CreateThread(pi.hProcess, APICALL(Sleep), 0);
+	APICALL(WaitForSingleObject)(thread, INFINITE);
+	APICALL(NtResumeProcess)(pi.hProcess);
 
 	APICALL(NtTerminateProcess)(CURRENT_PROCESS, 0);
 }

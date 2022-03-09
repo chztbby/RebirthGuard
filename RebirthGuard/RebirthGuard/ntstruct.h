@@ -15,6 +15,7 @@
 #define ViewUnmap 2
 #define LDR_DLL_NOTIFICATION_REASON_LOADED 1
 #define	MemoryBasicInformation 0
+#define MemoryMappedFilenameInformation 2
 #define	MemoryWorkingSetExList 4
 #define ProcessQuotaLimits 1
 #define ThreadQuerySetWin32StartAddress 9

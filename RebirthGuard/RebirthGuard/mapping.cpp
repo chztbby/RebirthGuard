@@ -107,11 +107,8 @@ VOID RebirthModule(PVOID hmodule, PVOID module_base)
 	for (DWORD i = 0; i < nt->FileHeader.NumberOfSections; ++i)
 		RG_ProtectMemory(GetPtr(module_base, sec[i].VirtualAddress), PADDING(sec[i].Misc.VirtualSize, nt->OptionalHeader.SectionAlignment), GetProtection(sec[i].Characteristics));
 
-#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
 	AddRebirthedModule(module_base, section);
-#else
-	APICALL(NtClose)(section);
-#endif
+
 	RG_FreeMemory(file_buffer);
 
 	if (mapped_ntdll)
@@ -253,27 +250,22 @@ VOID ExtendWorkingSet(PMAP_INFO info)
 
 VOID AddRebirthedModule(PVOID module_base, HANDLE section)
 {
-	static BOOL first = TRUE;
+    for (int i = 0;; i++)
+    {
+        if (rgdata->rmi[i].module_base == module_base)
+            return;
 
-	if (first && !IsRebirthed(RG_GetModuleHandleW(RG_GetModulePath((DWORD)EXE))))
-	{
-		first = FALSE;
-	}
-	else
-	{
-		for (int i = 0;; i++)
-		{
-			if (rebirthed_module_list[i].module_base == module_base)
-				return;
-
-			if (!rebirthed_module_list[i].section)
-			{
-				rebirthed_module_list[i].module_base = module_base;
-				rebirthed_module_list[i].section = section;
-				break;
-			}
-		}
-	}
+        if (!rgdata->rmi[i].module_base)
+        {
+			rgdata->rmi[i].module_base = module_base;
+#if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
+            rebirthed_module_list[i].section = section;
+#else
+			APICALL(NtClose)(section);
+#endif
+			return;
+        }
+    }
 }
 
 VOID MapAllSections(PMAP_INFO info)
