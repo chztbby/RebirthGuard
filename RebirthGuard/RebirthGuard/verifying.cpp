@@ -136,7 +136,7 @@ VOID CheckMemory()
 		MEMORY_BASIC_INFORMATION mbi;
 		RG_QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
 
-		if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && !IsInModule(ptr, PC_IMAGE_SIZE))
+		if (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY) && !GetModuleBaseFromPtr(ptr, PC_IMAGE_SIZE))
         {
             BYTE buffer[PAGE_SIZE] = { 0, };
             NTSTATUS ns = RG_QueryMemory(ptr, buffer, sizeof(buffer), MemoryMappedFilenameInformation);
