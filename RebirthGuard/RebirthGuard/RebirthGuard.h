@@ -14,7 +14,11 @@
 #include "RGString.h"
 #include "options.h"
 
-#define RG_DATA_PTR 0x10000
+#ifdef _WIN64
+#define RG_DATA_PTR 0x180000000
+#else
+#define RG_DATA_PTR 0x10000000
+#endif
 #define RG_DATA_SIZE 0x10000
 #define XOR_KEY 0xAD
 #define MODULE_FIRST 0
