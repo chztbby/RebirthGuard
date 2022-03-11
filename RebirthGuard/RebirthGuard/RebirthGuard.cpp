@@ -69,10 +69,13 @@ VOID RebirthModules(PVOID hmodule)
 #endif
 
 #if IS_ENABLED(RG_OPT_REBIRTH_ALL_MODULES)
-	LDR_DATA_TABLE_ENTRY list = { 0, };
-	while (RG_GetNextModule(&list))
-        if (!IsRebirthed(*(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4))))
-            RebirthModule(hmodule, *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4)));
+	LDR_MODULE module_info = { 0, };
+	while (RG_GetNextModule(&module_info))
+	{
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+		if (!IsRebirthed(pmodule_info->BaseAddress))
+			RebirthModule(hmodule, pmodule_info->BaseAddress);
+	}
 #endif
 #endif
 }

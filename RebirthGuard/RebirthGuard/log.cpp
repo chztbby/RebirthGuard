@@ -27,22 +27,22 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 	PVOID module_base1 = GetModuleBaseFromPtr(data1, PC_IMAGE_SIZE);
 	PVOID module_base2 = GetModuleBaseFromPtr(data2, PC_IMAGE_SIZE);
 
-	LDR_DATA_TABLE_ENTRY list = { 0, };
-	for (DWORD i = 0; RG_GetNextModule(&list); ++i)
+	LDR_MODULE module_info = { 0, };
+	for (DWORD i = 0; RG_GetNextModule(&module_info); ++i)
 	{
-		PVOID current_module_base = *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4));
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
 
-		if (module_base1 == current_module_base)
+		if (module_base1 == pmodule_info->BaseAddress)
 		{
-			RG_wcscpy(module_name1, list.FullDllName.Buffer);
+			RG_wcscpy(module_name1, pmodule_info->BaseDllName.Buffer);
 			RG_wcscat(module_name1, L" +");
-			RG_wcscpy(module_path1, RG_GetModulePath(current_module_base));
+			RG_wcscpy(module_path1, pmodule_info->FullDllName.Buffer);
 		}
-		if (module_base2 == current_module_base)
+		if (module_base2 == pmodule_info->BaseAddress)
 		{
-			RG_wcscpy(module_name2, list.FullDllName.Buffer);
+			RG_wcscpy(module_name2, pmodule_info->BaseDllName.Buffer);
 			RG_wcscat(module_name2, L" +");
-			RG_wcscpy(module_path2, RG_GetModulePath(current_module_base));
+			RG_wcscpy(module_path2, pmodule_info->FullDllName.Buffer);
 		}
 	}
 

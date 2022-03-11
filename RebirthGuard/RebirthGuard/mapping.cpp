@@ -11,7 +11,7 @@ VOID RebirthModule(PVOID hmodule, PVOID module_base)
 	if (IsRebirthed(module_base))
 		return;
 
-	PVOID original_ntdll = RG_GetModuleHandleW(RG_GetModulePath(NTDLL));
+	PVOID original_ntdll = RG_GetModuleHandleW(RG_GetModulePath(MODULE_NTDLL));
 	PVOID mapped_ntdll = NULL;
 
 	decltype(&NtCreateSection) pNtCreateSection = APICALL(NtCreateSection);
@@ -139,9 +139,9 @@ PVOID ManualMap(PVOID module_base)
 
 	nt = GetNtHeader(image_base);
 
-	HMODULE ntdll = RG_GetModuleHandleW(RG_GetModulePath(NTDLL));
-	HMODULE kernel32 = RG_GetModuleHandleW(RG_GetModulePath(KERNEL32));
-	HMODULE kernelbase = RG_GetModuleHandleW(RG_GetModulePath(KERNELBASE));
+	HMODULE ntdll = RG_GetModuleHandleW(RG_GetModulePath(MODULE_NTDLL));
+	HMODULE kernel32 = RG_GetModuleHandleW(RG_GetModulePath(MODULE_KERNEL32));
+	HMODULE kernelbase = RG_GetModuleHandleW(RG_GetModulePath(MODULE_KERNELBASE));
 
 	PIMAGE_BASE_RELOCATION base_reloc = (PIMAGE_BASE_RELOCATION)GetPtr(image_base, nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 	SIZE_T delta = GetOffset(nt->OptionalHeader.ImageBase, module_base);

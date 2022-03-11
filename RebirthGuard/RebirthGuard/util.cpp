@@ -11,11 +11,12 @@ LPWSTR RG_GetModulePath(DWORD module_index)
 
 	if (!module_path[module_index][0])
 	{
-		LDR_DATA_TABLE_ENTRY list = { 0, };
+		LDR_MODULE module_info = { 0, };
 		for (DWORD i = MODULE_FIRST; i <= module_index; i++)
-			RG_GetNextModule(&list);
+			RG_GetNextModule(&module_info);
 
-		RG_wcscpy(module_path[module_index], (LPCWSTR)*(PVOID*)(GetPtr(&list, sizeof(PVOID) * 8)));
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+		RG_wcscpy(module_path[module_index], pmodule_info->FullDllName.Buffer);
 	}
 
 	return module_path[module_index];
@@ -23,51 +24,47 @@ LPWSTR RG_GetModulePath(DWORD module_index)
 
 LPCWSTR RG_GetModulePath(PVOID hmodule)
 {
-    LDR_DATA_TABLE_ENTRY list = { 0, };
-	while (RG_GetNextModule(&list))
-		if (hmodule == *(PVOID*)(GetPtr(&list, sizeof(PVOID) * 4)))
-			return (LPCWSTR)*(PVOID*)(GetPtr(&list, sizeof(PVOID) * 8));
+	LDR_MODULE module_info = { 0, };
+	while (RG_GetNextModule(&module_info))
+	{
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+		if (hmodule == pmodule_info->BaseAddress)
+			return pmodule_info->FullDllName.Buffer;
+	}
 
 	return NULL;
 }
 
-PVOID RG_GetNextModule(PLDR_DATA_TABLE_ENTRY plist)
+PVOID RG_GetNextModule(PLDR_MODULE pmodule_info)
 {
-	static LDR_DATA_TABLE_ENTRY* first = NULL;
-
-	if (!*(PVOID*)plist)
+	if (!pmodule_info->BaseAddress)
 	{
-		if (!first)
-		{
 #ifdef _WIN64
-			first = (LDR_DATA_TABLE_ENTRY*)(*(*((PTEB)__readgsqword(0x30))->ProcessEnvironmentBlock).Ldr).InMemoryOrderModuleList.Flink;
-			*plist = *(LDR_DATA_TABLE_ENTRY*)(*(*((PTEB)__readgsqword(0x30))->ProcessEnvironmentBlock).Ldr).InMemoryOrderModuleList.Flink;
+		PTEB teb = (PTEB)__readgsqword(0x30);		
 #else
-			first = (LDR_DATA_TABLE_ENTRY*)(*(*((PTEB)__readfsdword(0x18))->ProcessEnvironmentBlock).Ldr).InMemoryOrderModuleList.Flink;
-			*plist = *(LDR_DATA_TABLE_ENTRY*)(*(*((PTEB)__readfsdword(0x18))->ProcessEnvironmentBlock).Ldr).InMemoryOrderModuleList.Flink;
+		PTEB teb = (PTEB)__readfsdword(0x18);
 #endif
-		}
-		else
-			*plist = *first;
+		*pmodule_info = *(PLDR_MODULE)teb->Peb->LoaderData->InMemoryOrderModuleList.Flink;
 	}
 	else
-		*plist = *(LDR_DATA_TABLE_ENTRY*)(*(PVOID*)plist);
+	{
+		*pmodule_info = *(PLDR_MODULE)pmodule_info->InLoadOrderModuleList.Flink;
+	}
 
-	return plist->DllBase;
+	return pmodule_info->BaseAddress;
 }
 
 VOID RG_HideModule(PVOID hmodule)
 {
 #if IS_ENABLED(RG_OPT_HIDE_MODULE)
 #ifdef _WIN64
-	PPEB_LDR_DATA_ ldr = (PPEB_LDR_DATA_)(*((PTEB)__readgsqword(0x30))->ProcessEnvironmentBlock).Ldr;
+	PTEB teb = (PTEB)__readgsqword(0x30);
 #else
-	PPEB_LDR_DATA_ ldr = (PPEB_LDR_DATA_)(*((PTEB)__readfsdword(0x18))->ProcessEnvironmentBlock).Ldr;
+	PTEB teb = (PTEB)__readfsdword(0x18);
 #endif
-	for (PLIST_ENTRY node = ldr->InLoadOrderModuleList.Flink; node; node = node->Flink)
+	for (PLIST_ENTRY node = teb->Peb->LoaderData->InLoadOrderModuleList.Flink; node; node = node->Flink)
 	{
-		PLDR_DATA_TABLE_ENTRY entry = (PLDR_DATA_TABLE_ENTRY)node;
-		if (entry->DllBase == hmodule)
+		if (((PLDR_MODULE)node)->BaseAddress == hmodule)
 		{
 			node->Blink->Flink = node->Flink;
 			node->Flink->Blink = node->Blink;
@@ -84,31 +81,27 @@ PVOID RG_GetApi(DWORD module_index, LPCSTR api_name)
 
 PVOID RG_GetApi(LPCSTR api_name)
 {
-    PVOID api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(NTDLL)), api_name);
+    PVOID api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(MODULE_NTDLL)), api_name);
     if (!api)
-        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(KERNELBASE)), api_name);
+        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(MODULE_KERNELBASE)), api_name);
     if (!api)
-        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(KERNEL32)), api_name);
+        api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(MODULE_KERNEL32)), api_name);
 
     return api;
 }
 
 HMODULE RG_GetModuleHandleW(LPCWSTR module_path)
 {
-	LDR_DATA_TABLE_ENTRY list = { 0, };
-
-	while (RG_GetNextModule(&list))
+	LDR_MODULE module_info = { 0, };
+	while (RG_GetNextModule(&module_info))
 	{
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+
 		if (!module_path)
-			return *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4));
+			return pmodule_info->BaseAddress;
 
-		WCHAR module_name[MAX_PATH];
-		module_name[0] = '\0';
-
-		RG_wcscpy(module_name, list.FullDllName.Buffer);
-
-		if (RG_wcsistr(module_path, module_name))
-			return *(HMODULE*)(GetPtr(&list, sizeof(PVOID) * 4));
+		if (RG_wcsistr(module_path, pmodule_info->BaseDllName.Buffer))
+			return pmodule_info->BaseAddress;
 	}
 
 	return NULL;
@@ -171,7 +164,7 @@ DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect)
 	return old;
 }
 
-NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type)
+NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, MEMORY_INFORMATION_CLASS type)
 {
 	return APICALL(NtQueryVirtualMemory)(CURRENT_PROCESS, ptr, type, buffer, buffer_size, NULL);
 }

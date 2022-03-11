@@ -22,10 +22,10 @@
 #define RG_DATA_SIZE 0x10000
 #define XOR_KEY 0xAD
 #define MODULE_FIRST 0
-#define EXE 0
-#define NTDLL 1
-#define KERNEL32 2
-#define KERNELBASE 3
+#define MODULE_EXE 0
+#define MODULE_NTDLL 1
+#define MODULE_KERNEL32 2
+#define MODULE_KERNELBASE 3
 #define MODULE_LAST 3
 #define PADDING(p, size) ((SIZE_T)((SIZE_T)(p) / (SIZE_T)(size) * (SIZE_T)(size) + ((SIZE_T)(p) % (SIZE_T)(size) ? (SIZE_T)(size) : 0)))
 #define GetPtr(base, offset) ((PVOID)((SIZE_T)(base) + (SIZE_T)(offset)))
@@ -129,7 +129,7 @@ VOID RestartProcess();
 // util.cpp
 LPWSTR RG_GetModulePath(DWORD module_index);
 LPCWSTR RG_GetModulePath(PVOID hmodule);
-PVOID RG_GetNextModule(PLDR_DATA_TABLE_ENTRY plist);
+PVOID RG_GetNextModule(PLDR_MODULE pmodule_info);
 VOID RG_HideModule(PVOID hmodule);
 PVOID RG_GetApi(DWORD module_index, LPCSTR api_name);
 PVOID RG_GetApi(LPCSTR api_name);
@@ -139,7 +139,7 @@ HANDLE RG_CreateThread(HANDLE process, PVOID entry, PVOID param);
 PVOID RG_AllocMemory(PVOID ptr, SIZE_T size, DWORD protect);
 VOID RG_FreeMemory(PVOID ptr);
 DWORD RG_ProtectMemory(PVOID ptr, SIZE_T size, DWORD protect);
-NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, DWORD type);
+NTSTATUS RG_QueryMemory(PVOID ptr, PVOID buffer, SIZE_T buffer_size, MEMORY_INFORMATION_CLASS type);
 LONG WINAPI RG_ExceptionHandler(PEXCEPTION_POINTERS e);
 VOID RG_SetCallbacks();
 BOOL IsExe(PVOID hmodule);

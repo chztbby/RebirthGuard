@@ -18,7 +18,7 @@ BOOL IsRebirthed(PVOID module_base)
 
         PSAPI_WORKING_SET_EX_INFORMATION wsi;
         wsi.VirtualAddress = mbi.AllocationBase;
-        RG_QueryMemory(nullptr, &wsi, sizeof(wsi), MemoryWorkingSetExList);
+        RG_QueryMemory(nullptr, &wsi, sizeof(wsi), MemoryWorkingSetExInformation);
 
         if (!wsi.VirtualAttributes.Locked)
             return FALSE;
@@ -29,11 +29,11 @@ BOOL IsRebirthed(PVOID module_base)
 
 PVOID GetModuleBaseFromPtr(PVOID ptr, PTR_CHECK type)
 {
-	LDR_DATA_TABLE_ENTRY list = { 0, };
-
-	for (DWORD i = 0; RG_GetNextModule(&list); ++i)
+	LDR_MODULE module_info = { 0, };
+	for (DWORD i = 0; RG_GetNextModule(&module_info); ++i)
 	{
-		PVOID module_base = *(PVOID*)GetPtr(&list, sizeof(PVOID) * 4);
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+		PVOID module_base = pmodule_info->BaseAddress;
 		PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
 		PVOID sptr;
 		PVOID eptr;
@@ -95,31 +95,31 @@ VOID CheckThread(PVOID start_address, THREAD_CHECK type)
 	}
 
 #if IS_ENABLED(RG_OPT_ANTI_DLL_INJECTION)
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNEL32, LoadLibraryA), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNEL32, LoadLibraryA), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNEL32, LoadLibraryW), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNEL32, LoadLibraryW), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNEL32, LoadLibraryExA), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNEL32, LoadLibraryExA), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNEL32, LoadLibraryExW), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNEL32, LoadLibraryExW), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNEL32_LoadLibraryExW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNELBASE, LoadLibraryA), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNELBASE, LoadLibraryA), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNELBASE, LoadLibraryW), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNELBASE, LoadLibraryW), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNELBASE, LoadLibraryExA), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNELBASE, LoadLibraryExA), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExA, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(KERNELBASE, LoadLibraryExW), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_KERNELBASE, LoadLibraryExW), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_KERNELBASE_LoadLibraryExW, start_address, (PVOID)(SIZE_T)type);
 
-	if (IsSameFunction(APICALL_FROM_MODULE(NTDLL, LdrLoadDll), start_address))
+	if (IsSameFunction(APICALL_FROM_MODULE(MODULE_NTDLL, LdrLoadDll), start_address))
 		RG_Report(RG_OPT_ANTI_DLL_INJECTION, REPORT_DLL_INJECTION_NTDLL_LdrLoadDll, start_address, (PVOID)(SIZE_T)type);
 #endif
 }
@@ -159,12 +159,13 @@ VOID CheckMemory()
 VOID CheckCRC()
 {
 #if IS_ENABLED(RG_OPT_INTEGRITY_CHECK)
-	LDR_DATA_TABLE_ENTRY list = { 0, };
+	LDR_MODULE module_info = { 0, };
 
-	for (DWORD i = 0; RG_GetNextModule(&list); i++)
+	for (DWORD i = 0; RG_GetNextModule(&module_info); i++)
 	{
-		PVOID module_base = RG_GetModuleHandleW(list.FullDllName.Buffer);
-		LPWSTR module_path = (LPWSTR)*(PVOID*)GetPtr(&list, 0x40);
+		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
+		PVOID module_base = pmodule_info->BaseAddress;
+		LPWSTR module_path = pmodule_info->FullDllName.Buffer;
 
 		MEMORY_BASIC_INFORMATION mbi;
 		RG_QueryMemory(module_base, &mbi, sizeof(mbi), MemoryBasicInformation);
@@ -174,10 +175,10 @@ VOID CheckCRC()
 #if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
 			for (int i = 0;; i++)
 			{
-				if (!rebirthed_module_list[i].module_base)
+				if (!rgdata->rmi[i].module_base)
 					RG_Report(RG_OPT_INTEGRITY_CHECK, REPORT_INTEGRITY_SECTION_CHECK, module_base, 0);
 
-				if (rebirthed_module_list[i].module_base == module_base)
+				if (rgdata->rmi[i].module_base == module_base)
 				{
 					LARGE_INTEGER section_offset;
 					section_offset.QuadPart = NULL;
@@ -188,7 +189,7 @@ VOID CheckCRC()
 					while (!module_base)
 					{
 						module_base = NULL;
-						APICALL(NtMapViewOfSection_T)(rebirthed_module_list[i].section, CURRENT_PROCESS, &module_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READONLY);
+						APICALL(NtMapViewOfSection)(rgdata->rmi[i].section, CURRENT_PROCESS, &module_base, NULL, NULL, &section_offset, &view_size, ViewUnmap, SEC_NO_CHANGE, PAGE_READONLY);
 					}
 
 					break;
@@ -198,9 +199,9 @@ VOID CheckCRC()
 			PVOID mapped_module = ManualMap(module_path);
 #ifdef _WIN64
 #if IS_ENABLED(RG_OPT_THREAD_CHECK)
-			if (i == NTDLL)
+			if (i == MODULE_NTDLL)
 			{
-				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleW(RG_GetModulePath(NTDLL)), APICALL(RtlUserThreadStart));
+				SIZE_T RtlUserThreadStart_offset = GetOffset(RG_GetModuleHandleW(RG_GetModulePath(MODULE_NTDLL)), APICALL(RtlUserThreadStart));
 				BYTE jmp_myRtlUserThreadStart[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, };
 				*(PVOID*)(jmp_myRtlUserThreadStart + 6) = ThreadCallback;
 				for (DWORD i = 0; i < 14; i++)
@@ -215,10 +216,10 @@ VOID CheckCRC()
 			(GetNtHeader(mapped_module))->OptionalHeader.ImageBase = (SIZE_T)RG_GetModuleHandleW(module_path);
 
 			if (CRC64(module_base) != CRC64(mapped_module))
-				RG_Report(RG_OPT_INTEGRITY_CHECK, REPORT_INTEGRITY_CRC64_CHECK, RG_GetModuleHandleW(list.FullDllName.Buffer), 0);
+				RG_Report(RG_OPT_INTEGRITY_CHECK, REPORT_INTEGRITY_CRC64_CHECK, module_base, 0);
 
 #if IS_ENABLED(RG_OPT_INTEGRITY_CHECK_HIDE_FROM_DEBUGGER)
-			APICALL(NtUnmapViewOfSection_T)(CURRENT_PROCESS, module_base);
+			APICALL(NtUnmapViewOfSection)(CURRENT_PROCESS, module_base);
 #endif
 
 			RG_FreeMemory(mapped_module);
