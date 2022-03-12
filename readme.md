@@ -5,7 +5,7 @@
 ## :page_facing_up: Features
 * __Module remapping__
 * __Thread filtering__
-* __Module hidding__
+* __Module hiding__
 * __Memory check__
 * __Integrity check__
 * __Anti-DLL Injection__

@@ -5,6 +5,9 @@
 
 #include "RebirthGuard.h"
 
+
+PRG_DATA rgdata;
+
 VOID RG_Initialze(PVOID hmodule)
 {
 	if (IsRebirthed(hmodule))
@@ -13,9 +16,42 @@ VOID RG_Initialze(PVOID hmodule)
 	Rebirth(hmodule);
 }
 
+PRG_DATA RG_GetGlobalData()
+{
+	PRG_DATA rgdata = NULL;
+
+	for (PVOID ptr = 0; ptr < (PVOID)MEMORY_END;)
+	{
+		MEMORY_BASIC_INFORMATION mbi;
+		RG_QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);
+
+		if (mbi.Type == MEM_PRIVATE && mbi.Protect == PAGE_READWRITE && mbi.RegionSize == RG_DATA_SIZE)
+		{
+			PRG_DATA t = (PRG_DATA)ptr;
+			if(t->magic[0] == RG_MAGIC_0 && t->magic[1] == RG_MAGIC_1 && t->magic[2] == RG_MAGIC_2)
+			{
+				rgdata = t;
+				break;
+			}
+		}
+
+		ptr = GetPtr(ptr, mbi.RegionSize);
+    }
+
+	if (!rgdata)
+	{
+		rgdata = (PRG_DATA)RG_AllocMemory(NULL, RG_DATA_SIZE, PAGE_READWRITE);
+		rgdata->magic[0] = RG_MAGIC_0;
+		rgdata->magic[1] = RG_MAGIC_1;
+		rgdata->magic[2] = RG_MAGIC_2;
+	}
+
+	return rgdata;
+}
+
 VOID Rebirth(PVOID hmodule)
 {
-	rgdata = (PRG_DATA)RG_AllocMemory((PVOID)RG_DATA_PTR, RG_DATA_SIZE, PAGE_READWRITE);
+	rgdata = RG_GetGlobalData();
 
 #if IS_ENABLED(RG_OPT_COMPAT_THEMIDA) || IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
 	PIMAGE_NT_HEADERS nt = GetNtHeader(hmodule);
@@ -23,6 +59,7 @@ VOID Rebirth(PVOID hmodule)
 	CopyPeData(mapped_module, hmodule, PE_TYPE_IMAGE);
 #else
 	PVOID mapped_module = ManualMap(hmodule);
+	*(PRG_DATA*)GetPtr(mapped_module, GetOffset(hmodule, &rgdata)) = rgdata;
 #endif
 	auto pRebirthModule = decltype (&RebirthModule)GetPtr(mapped_module, GetOffset(hmodule, RebirthModule));
 	pRebirthModule(hmodule, hmodule);

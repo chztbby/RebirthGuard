@@ -127,11 +127,7 @@ VOID CheckThread(PVOID start_address, THREAD_CHECK type)
 VOID CheckMemory()
 {
 #if IS_ENABLED(RG_OPT_MEMORY_CHECK)
-#ifdef _WIN64
-	for (PVOID ptr = 0; ptr < (PVOID)0x7FFFFFFF0000;)
-#else
-	for (PVOID ptr = 0; ptr < (PVOID)0x7FFF0000;)
-#endif
+	for (PVOID ptr = 0; ptr < (PVOID)MEMORY_END;)
 	{
 		MEMORY_BASIC_INFORMATION mbi;
 		RG_QueryMemory(ptr, &mbi, sizeof(mbi), MemoryBasicInformation);

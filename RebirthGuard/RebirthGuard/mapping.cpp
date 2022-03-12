@@ -250,7 +250,7 @@ VOID ExtendWorkingSet(PMAP_INFO info)
 
 VOID AddRebirthedModule(PVOID module_base, HANDLE section)
 {
-    for (int i = 0;; i++)
+    for (DWORD i = 0; i < ARRAYSIZE(rgdata->rmi); i++)
     {
         if (rgdata->rmi[i].module_base == module_base)
             return;

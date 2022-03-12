@@ -14,13 +14,10 @@
 #include "RGString.h"
 #include "options.h"
 
-#ifdef _WIN64
-#define RG_DATA_PTR 0x180000000
-#else
-#define RG_DATA_PTR 0x10000000
-#endif
+#define RG_MAGIC_0 0x20170408
+#define RG_MAGIC_1 0x12345678
+#define RG_MAGIC_2 0x87654321
 #define RG_DATA_SIZE 0x10000
-#define XOR_KEY 0xAD
 #define MODULE_FIRST 0
 #define MODULE_EXE 0
 #define MODULE_NTDLL 1
@@ -39,6 +36,11 @@
 #define ALLOCATION_GRANULARITY 0x10000
 #define CURRENT_PROCESS ((HANDLE)-1)
 #define CURRENT_THREAD ((HANDLE)-2)
+#ifdef _WIN64
+#define MEMORY_END 0x7FFFFFFF0000
+#else
+#define MEMORY_END 0x7FFF0000
+#endif
 
 typedef struct _REBIRTHED_MODULE_INFO
 {
@@ -52,7 +54,7 @@ typedef struct _RG_DATA
 	REBIRTHED_MODULE_INFO rmi[RG_DATA_SIZE - sizeof(magic)];
 } RG_DATA, *PRG_DATA;
 
-static PRG_DATA rgdata = (PRG_DATA)RG_DATA_PTR;
+extern PRG_DATA rgdata;
 
 typedef struct _MAP_INFO
 {
@@ -121,6 +123,7 @@ enum PTR_CHECK
 
 // RebirthGuard.cpp
 VOID RG_Initialze(PVOID hmodule);
+PRG_DATA RG_GetGlobalData();
 VOID Rebirth(PVOID hmodule);
 VOID RebirthModules(PVOID hmodule);
 BOOL CheckProcessPolicy();
