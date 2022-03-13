@@ -57,7 +57,15 @@ VOID CALLBACK DllCallback(ULONG reason, PLDR_DLL_NOTIFICATION_DATA data, PVOID c
 
 #if IS_ENABLED(RG_OPT_REBIRTH_ALL_MODULES)
 #ifdef _WIN64 // unstable in x86 yet.
-		RebirthModule(NULL, data->Loaded.DllBase);
+		BOOL packed = FALSE;
+		PIMAGE_NT_HEADERS nt = GetNtHeader(data->Loaded.DllBase);
+		PIMAGE_SECTION_HEADER sec = IMAGE_FIRST_SECTION(nt);
+		for (DWORD i = 0; !packed && i < nt->FileHeader.NumberOfSections; ++i)
+			if (strstr((CHAR*)sec[i].Name, RGS("themida")) || strstr((CHAR*)sec[i].Name, RGS("vmp")))
+				packed = TRUE;
+
+		if (!packed)
+			RebirthModule(NULL, data->Loaded.DllBase);
 #endif
 #endif
 	}

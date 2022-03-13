@@ -284,8 +284,7 @@ VOID MapAllSections(PMAP_INFO info)
 #endif
 #if IS_ENABLED(RG_OPT_COMPAT_VMPROTECT)
 			if (sec[i].Name[1] == 'v' && sec[i].Name[2] == 'm' && sec[i].Name[3] == 'p')
-				if (sec[i].Name[4] == '1' || sec[i].Name[4] == '2')
-					chr = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+				chr = IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
 #endif
 
 			MapChunk(info, sec[i].VirtualAddress, (SIZE_T)PADDING(sec[i].Misc.VirtualSize, info->nt->OptionalHeader.SectionAlignment), chr);
