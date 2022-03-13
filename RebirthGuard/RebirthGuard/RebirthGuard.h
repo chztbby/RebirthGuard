@@ -30,7 +30,7 @@
 #define GetNtHeader(base) ((PIMAGE_NT_HEADERS)((SIZE_T)(base) + (SIZE_T)((PIMAGE_DOS_HEADER)(base))->e_lfanew))
 #define TO_STRING(param) #param
 #define APICALL(api_name) ((decltype(&api_name))RG_GetApi(RGS(TO_STRING(api_name))))
-#define APICALL_FROM_MODULE(index, api_name) ((decltype(&api_name))RG_GetApi(index, RGS(TO_STRING(api_name))))
+#define APICALL_FROM_MODULE(index, api_name) ((decltype(&api_name))RG_GetApi(RGS(TO_STRING(api_name)), index))
 #define IS_ENABLED(OPTION) (OPTION & RG_ENABLE)
 #define PAGE_SIZE 0x1000
 #define ALLOCATION_GRANULARITY 0x10000
@@ -134,8 +134,7 @@ LPWSTR RG_GetModulePath(DWORD module_index);
 LPCWSTR RG_GetModulePath(PVOID hmodule);
 PVOID RG_GetNextModule(PLDR_MODULE pmodule_info);
 VOID RG_HideModule(PVOID hmodule);
-PVOID RG_GetApi(DWORD module_index, LPCSTR api_name);
-PVOID RG_GetApi(LPCSTR api_name);
+PVOID RG_GetApi(LPCSTR api_name, DWORD module_index = 0);
 HMODULE RG_GetModuleHandleW(LPCWSTR module_path);
 PVOID RG_GetProcAddress(HMODULE hmodule, LPCSTR proc_name);
 HANDLE RG_CreateThread(HANDLE process, PVOID entry, PVOID param);

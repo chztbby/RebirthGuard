@@ -74,13 +74,11 @@ VOID RG_HideModule(PVOID hmodule)
 #endif
 }
 
-PVOID RG_GetApi(DWORD module_index, LPCSTR api_name)
+PVOID RG_GetApi(LPCSTR api_name, DWORD module_index)
 {
-	return RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(module_index)), api_name);
-}
+    if (module_index)
+        return RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(module_index)), api_name);
 
-PVOID RG_GetApi(LPCSTR api_name)
-{
     PVOID api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(MODULE_NTDLL)), api_name);
     if (!api)
         api = RG_GetProcAddress(RG_GetModuleHandleW(RG_GetModulePath(MODULE_KERNELBASE)), api_name);
