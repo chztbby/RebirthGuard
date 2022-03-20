@@ -15,8 +15,7 @@ LPWSTR RG_GetModulePath(DWORD module_index)
 		for (DWORD i = MODULE_FIRST; i <= module_index; i++)
 			RG_GetNextModule(&module_info);
 
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-		RG_wcscpy(module_path[module_index], pmodule_info->FullDllName.Buffer);
+		RG_wcscpy(module_path[module_index], module_info.FullDllName.Buffer);
 	}
 
 	return module_path[module_index];
@@ -27,9 +26,8 @@ LPCWSTR RG_GetModulePath(PVOID hmodule)
 	LDR_MODULE module_info = { 0, };
 	while (RG_GetNextModule(&module_info))
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-		if (hmodule == pmodule_info->BaseAddress)
-			return pmodule_info->FullDllName.Buffer;
+		if (hmodule == module_info.BaseAddress)
+			return module_info.FullDllName.Buffer;
 	}
 
 	return NULL;
@@ -37,6 +35,7 @@ LPCWSTR RG_GetModulePath(PVOID hmodule)
 
 PVOID RG_GetNextModule(PLDR_MODULE pmodule_info)
 {
+	PLDR_MODULE flink;
 	if (!pmodule_info->BaseAddress)
 	{
 #ifdef _WIN64
@@ -44,12 +43,16 @@ PVOID RG_GetNextModule(PLDR_MODULE pmodule_info)
 #else
 		PTEB teb = (PTEB)__readfsdword(0x18);
 #endif
-		*pmodule_info = *(PLDR_MODULE)teb->Peb->LoaderData->InMemoryOrderModuleList.Flink;
+		flink = (PLDR_MODULE)teb->Peb->LoaderData->InMemoryOrderModuleList.Flink;
+		
 	}
 	else
 	{
-		*pmodule_info = *(PLDR_MODULE)pmodule_info->InLoadOrderModuleList.Flink;
+		flink = (PLDR_MODULE)pmodule_info->InMemoryOrderModuleList.Flink;
 	}
+
+	PLDR_MODULE base = (PLDR_MODULE)GetPtr(flink, GetOffset(&flink->InMemoryOrderModuleList, flink));
+	*pmodule_info = *base;
 
 	return pmodule_info->BaseAddress;
 }
@@ -93,13 +96,11 @@ HMODULE RG_GetModuleHandleW(LPCWSTR module_path)
 	LDR_MODULE module_info = { 0, };
 	while (RG_GetNextModule(&module_info))
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-
 		if (!module_path)
-			return pmodule_info->BaseAddress;
+			return module_info.BaseAddress;
 
-		if (RG_wcsistr(module_path, pmodule_info->BaseDllName.Buffer))
-			return pmodule_info->BaseAddress;
+		if (RG_wcsistr(module_path, module_info.BaseDllName.Buffer))
+			return module_info.BaseAddress;
 	}
 
 	return NULL;

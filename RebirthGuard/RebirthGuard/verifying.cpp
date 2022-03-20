@@ -32,8 +32,7 @@ PVOID GetModuleBaseFromPtr(PVOID ptr, PTR_CHECK type)
 	LDR_MODULE module_info = { 0, };
 	for (DWORD i = 0; RG_GetNextModule(&module_info); ++i)
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-		PVOID module_base = pmodule_info->BaseAddress;
+		PVOID module_base = module_info.BaseAddress;
 		PIMAGE_NT_HEADERS nt = GetNtHeader(module_base);
 		PVOID sptr;
 		PVOID eptr;
@@ -159,9 +158,8 @@ VOID CheckCRC()
 
 	for (DWORD i = 0; RG_GetNextModule(&module_info); i++)
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-		PVOID module_base = pmodule_info->BaseAddress;
-		LPWSTR module_path = pmodule_info->FullDllName.Buffer;
+		PVOID module_base = module_info.BaseAddress;
+		LPWSTR module_path = module_info.FullDllName.Buffer;
 
 		MEMORY_BASIC_INFORMATION mbi;
 		RG_QueryMemory(module_base, &mbi, sizeof(mbi), MemoryBasicInformation);

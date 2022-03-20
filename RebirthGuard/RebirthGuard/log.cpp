@@ -30,19 +30,17 @@ VOID RG_Report(DWORD flag, RG_REPORT_CODE code, PVOID data1, PVOID data2)
 	LDR_MODULE module_info = { 0, };
 	for (DWORD i = 0; RG_GetNextModule(&module_info); ++i)
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-
-		if (module_base1 == pmodule_info->BaseAddress)
+		if (module_base1 == module_info.BaseAddress)
 		{
-			RG_wcscpy(module_name1, pmodule_info->BaseDllName.Buffer);
+			RG_wcscpy(module_name1, module_info.BaseDllName.Buffer);
 			RG_wcscat(module_name1, L" +");
-			RG_wcscpy(module_path1, pmodule_info->FullDllName.Buffer);
+			RG_wcscpy(module_path1, module_info.FullDllName.Buffer);
 		}
-		if (module_base2 == pmodule_info->BaseAddress)
+		if (module_base2 == module_info.BaseAddress)
 		{
-			RG_wcscpy(module_name2, pmodule_info->BaseDllName.Buffer);
+			RG_wcscpy(module_name2, module_info.BaseDllName.Buffer);
 			RG_wcscat(module_name2, L" +");
-			RG_wcscpy(module_path2, pmodule_info->FullDllName.Buffer);
+			RG_wcscpy(module_path2, module_info.FullDllName.Buffer);
 		}
 	}
 

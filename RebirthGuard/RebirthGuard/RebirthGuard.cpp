@@ -109,9 +109,8 @@ VOID RebirthModules(PVOID hmodule)
 	LDR_MODULE module_info = { 0, };
 	while (RG_GetNextModule(&module_info))
 	{
-		PLDR_MODULE pmodule_info = (PLDR_MODULE)GetPtr(&module_info, GetOffset(&module_info.InMemoryOrderModuleList, &module_info));
-		if (!IsRebirthed(pmodule_info->BaseAddress))
-			RebirthModule(hmodule, pmodule_info->BaseAddress);
+		if (!IsRebirthed(module_info.BaseAddress))
+			RebirthModule(hmodule, module_info.BaseAddress);
 	}
 #endif
 #endif
