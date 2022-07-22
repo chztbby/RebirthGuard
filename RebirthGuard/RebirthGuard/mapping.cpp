@@ -202,15 +202,15 @@ PVOID ManualMap(PVOID module_base)
 				PVOID redirect;
 				if (module_base == kernel32)
 				{
-					if (redirect = APICALL(GetProcAddress)(ntdll, ibn->Name))
+					if (redirect = APICALL(GetProcAddress)(ntdll, (LPCSTR)ibn->Name))
 						func = redirect;
 
-					else if (redirect = APICALL(GetProcAddress)(kernelbase, ibn->Name))
+					else if (redirect = APICALL(GetProcAddress)(kernelbase, (LPCSTR)ibn->Name))
 						func = redirect;
 				}
 				else
 				{
-					func = APICALL(GetProcAddress)(hmodule, ibn->Name);
+					func = APICALL(GetProcAddress)(hmodule, (LPCSTR)ibn->Name);
 				}
 
 				if (!func)

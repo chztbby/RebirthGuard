@@ -116,6 +116,7 @@ VOID RebirthModules(PVOID hmodule)
 #endif
 }
 
+#if IS_ENABLED(RG_OPT_SET_PROCESS_POLICY)
 BOOL CheckProcessPolicy()
 {
 	if (RG_PROCESS_POLICY & PROCESS_CREATION_MITIGATION_POLICY_STRICT_HANDLE_CHECKS_ALWAYS_ON)
@@ -158,3 +159,4 @@ VOID RestartProcess()
 
 	APICALL(NtTerminateProcess)(CURRENT_PROCESS, 0);
 }
+#endif

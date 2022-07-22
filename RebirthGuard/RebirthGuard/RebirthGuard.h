@@ -51,7 +51,7 @@ typedef struct _REBIRTHED_MODULE_INFO
 typedef struct _RG_DATA
 {
 	SIZE_T magic[3];
-	REBIRTHED_MODULE_INFO rmi[RG_DATA_SIZE - sizeof(magic)];
+	REBIRTHED_MODULE_INFO rmi[RG_DATA_SIZE - sizeof(SIZE_T)*3];
 } RG_DATA, *PRG_DATA;
 
 extern PRG_DATA rgdata;
